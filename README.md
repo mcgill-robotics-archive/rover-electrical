@@ -1,2 +1,2 @@
-# rover-electrical
-Mars Rover Project Electrical Designs
+# rover-embedded
+Mars Rover Project Embedded Development
