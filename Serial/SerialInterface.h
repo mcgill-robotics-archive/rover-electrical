@@ -15,7 +15,12 @@ class SerialInterface
 public:
     SerialInterface() {}
 
-    void initialize(int _baudRate);
+    /**
+     * Initialize the serial interface with parameters.
+     * @param _baudRate baudrate to use with serial connection.
+     * @param _timeout time to allow for a response to be returned to the sender.
+     */
+    void initialize(int _baudRate, int _timeout);
 
     void send(const String message);
     String receive();
@@ -26,4 +31,5 @@ private:
     void write(const String message);
 
     int baudRate;
+    int timeout;
 };

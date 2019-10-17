@@ -1,8 +1,9 @@
 #include "SerialInterface.h"
 
-void SerialInterface::initialize(int _baudRate)
+void SerialInterface::initialize(int _baudRate, int _timeout)
 {
     baudRate = _baudRate;
+    timeout = _timeout;
     // TODO: allow for a wider range of baudrates, for now only accepts 9600
     if (baudRate != 9600) return;
     Serial.setTimeout(1000);
@@ -52,11 +53,15 @@ void SerialInterface::send(const String message)
     // Send the message
     write(message);
     // Allow time for the receiver to send an ack
-    delay(10);
+    delay(100);
+
+    unsigned long start_time = millis();
     while (!read().equals("ACK"))
     {
+        Serial.print(millis() - start_time);
+        if ((millis() - start_time) >= timeout) break;
         write(message);
-        delay(10);
+        delay(100);
     }
 }
 
