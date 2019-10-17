@@ -39,12 +39,25 @@ String SerialInterface::receive()
     // Dont print ack if received ACK or nothing
     if (!result.equals("") && !result.equals("ACK"))
         write("ACK");
+    
+    // ACKs should only be processed by the low level methods and not be passed upwards
+    if (result.equals("ACK"))
+        return "";
+
     return result;
 }
 
 void SerialInterface::send(const String message)
 {
+    // Send the message
     write(message);
+    // Allow time for the receiver to send an ack
+    delay(10);
+    while (!read().equals("ACK"))
+    {
+        write(message);
+        delay(10);
+    }
 }
 
 void SerialInterface::write(const String message)

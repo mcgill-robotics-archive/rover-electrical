@@ -1,6 +1,6 @@
 #pragma once
 /**
- * A serial protocol inspired by the PPP specifications.
+ * Basic specifications:
  * 1. The flag "[" (0x5B) signifies the start of a message and "]" (0x5D), the end
  * 2. The flag 0x7E is an escape byte
  * 3. Each sent message expects an ACK
