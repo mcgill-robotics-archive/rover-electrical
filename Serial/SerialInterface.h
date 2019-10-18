@@ -1,35 +1,70 @@
 #pragma once
-/**
- * Basic specifications:
- * 1. The flag "[" (0x5B) signifies the start of a message and "]" (0x5D), the end
- * 2. The flag 0x7E is an escape byte
- * 3. Each sent message expects an ACK
- * @author Roey Borsteinas
- * @date October 7, 2019
- */
-
 #include <Arduino.h>
+#include "utils/Queue.h"
+
+enum SerialStates
+{
+    S_WAITING,          // Waiting to receive start byte
+    S_READING_HEADER,   // Reading n-bytes of header
+    S_READING_PAYLOAD   // Reading payload until stop byte 
+};
 
 class SerialInterface
 {
 public:
-    SerialInterface() {}
 
-    /**
-     * Initialize the serial interface with parameters.
-     * @param _baudRate baudrate to use with serial connection.
-     * @param _timeout time to allow for a response to be returned to the sender.
-     */
-    void initialize(int _baudRate, int _timeout);
+    void begin(int _baudrate)
+    {
+        Serial.begin(_baudrate);
+    }
 
-    void send(const String message);
-    String receive();
+    void update()
+    {
+        while (Serial.available() > 0)
+        {
+            process_incoming(Serial.read());
+        }
+    }
+
+    String next_message()
+    {
+        return messages.dequeue();
+    }
 
 private:
-    // These methods are low level and deal directly with binary data sent over serial
-    String read();
-    void write(const String message);
+    void process_incoming(const byte in_byte)
+    {
+        static String message;
+        static SerialStates state = S_WAITING;
 
-    int baudRate;
-    int timeout;
+        switch (in_byte)
+        {
+            case '~': // Start of message
+                if (state == S_WAITING)
+                {
+                    message = "";
+                    state = S_READING_PAYLOAD;
+                    break;
+                }
+                else
+                {
+                    validate_message(message);
+                    message = "";
+                    state = S_WAITING;
+                    break;
+                }              
+            default: // start pushing data into the string
+                if (state == S_WAITING) break;
+                message = message + (char)in_byte;
+                break;
+        }   
+    }
+
+    void validate_message(String& message)
+    {
+        if (!message.equals(""))
+            messages.enqueue(message);
+    }
+
+    Queue<String> messages;
 };
