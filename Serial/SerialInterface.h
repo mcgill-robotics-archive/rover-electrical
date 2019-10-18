@@ -9,6 +9,16 @@ enum SerialStates
     S_READING_PAYLOAD   // Reading payload until stop byte 
 };
 
+// Store message information for processing
+struct Message
+{
+    byte systemID;
+    byte frameID;
+    byte checksum;
+    byte frameType;
+    String data;
+};
+
 class SerialInterface
 {
 public:
@@ -26,7 +36,7 @@ public:
         }
     }
 
-    String next_message()
+    Message next_message()
     {
         return messages.dequeue();
     }
@@ -34,37 +44,62 @@ public:
 private:
     void process_incoming(const byte in_byte)
     {
-        static String message;
+        static Message message;
         static SerialStates state = S_WAITING;
+        static unsigned int header_pos = 0;
 
-        switch (in_byte)
+        switch (state)
         {
-            case '~': // Start of message
-                if (state == S_WAITING)
+            case S_WAITING: // Waiting for start of a new packet
+                // if expecting a packet and byte is not start byte, break.
+                if (in_byte != '~') break;
+                state = S_READING_HEADER;
+                header_pos = 0;
+                break;
+            case S_READING_HEADER: // Reading the header information for a packet
+                switch (header_pos)
                 {
-                    message = "";
-                    state = S_READING_PAYLOAD;
+                    case 0:
+                        message.systemID = in_byte;
+                        header_pos++;
+                        break;
+                    case 1:
+                        message.frameID = in_byte;
+                        header_pos++;
+                        break;
+                    case 2:
+                        message.checksum = in_byte;
+                        header_pos++;
+                        break;
+                    case 3:
+                        message.frameType = in_byte;
+                        state = S_READING_PAYLOAD;
+                        break;
+                    default:
+                        break;
+                }
+                break;
+            case S_READING_PAYLOAD:
+                if (in_byte == '~')
+                {
+                    validate_message(message);
+                    message = Message();
+                    state = S_WAITING;
                     break;
                 }
                 else
                 {
-                    validate_message(message);
-                    message = "";
-                    state = S_WAITING;
+                    message.data = message.data + (char)in_byte;
                     break;
-                }              
-            default: // start pushing data into the string
-                if (state == S_WAITING) break;
-                message = message + (char)in_byte;
-                break;
-        }   
+                }
+        }
     }
 
-    void validate_message(String& message)
+    void validate_message(Message& message)
     {
-        if (!message.equals(""))
+        if (!message.data.equals(""))
             messages.enqueue(message);
     }
 
-    Queue<String> messages;
+    Queue<Message> messages;
 };
