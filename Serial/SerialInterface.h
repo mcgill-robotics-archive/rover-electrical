@@ -2,6 +2,9 @@
 #include <Arduino.h>
 #include "utils/Queue.h"
 
+#define MAX_QUEUE_SIZE 32
+#define ID '0'
+
 enum SerialStates
 {
     S_WAITING,          // Waiting to receive start byte
@@ -36,9 +39,42 @@ public:
         }
     }
 
-    Message next_message()
+    Message get_next_message()
     {
-        return messages.dequeue();
+        //TODO : more descriptive function name
+        return in_messages.dequeue();
+    }
+
+    void send_message(uint8_t frameType, const char* payload)
+    {
+        Message message = { 
+            .systemID = ID, 
+            .frameID = next_message_id, 
+            .checksum = '3', // TODO: implement checksum
+            .frameType = frameType, 
+            .data = String(payload) }; 
+
+        out_messages[next_message_id++] = message;
+
+        next_message_id %= MAX_QUEUE_SIZE;
+        Serial.flush(); //TODO: non-blocking
+        Serial.println(encode_message(message));
+    }
+
+    String encode_message(const Message& message)
+    {
+        String result;
+        result.reserve(sizeof(char) * (6 + message.data.length()));
+
+        result += '~';
+        result += message.systemID;
+        result += message.frameID;
+        result += message.checksum;
+        result += message.frameType;
+        result += message.data;
+        result += "#";
+
+        return result;
     }
 
 private:
@@ -56,7 +92,13 @@ private:
                 state = S_READING_HEADER;
                 header_pos = 0;
                 break;
-            case S_READING_HEADER: // Reading the header information for a packet
+            case S_READING_HEADER: // Reading the header information for a packet.
+                if (in_byte == '#') // If the end byte is read, break.
+                {
+                    message = Message();
+                    state = S_WAITING;
+                    break;
+                }
                 switch (header_pos)
                 {
                     case 0:
@@ -80,7 +122,7 @@ private:
                 }
                 break;
             case S_READING_PAYLOAD:
-                if (in_byte == '~')
+                if (in_byte == '#') // If the end byte is read, process the message and break.
                 {
                     validate_message(message);
                     message = Message();
@@ -98,8 +140,11 @@ private:
     void validate_message(Message& message)
     {
         if (!message.data.equals(""))
-            messages.enqueue(message);
+            in_messages.enqueue(message);
     }
 
-    Queue<Message> messages;
+    Queue<Message> in_messages;
+    Message out_messages[MAX_QUEUE_SIZE];
+
+    uint8_t next_message_id = 0;
 };
