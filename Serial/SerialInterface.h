@@ -25,6 +25,14 @@ struct Message
 class SerialInterface
 {
 public:
+    SerialInterface()
+    {
+        // initialize the array to false
+        for (uint8_t i = 0; i < MAX_QUEUE_SIZE; i++)
+        {
+            priority_ids[i] = false;
+        }
+    }
 
     void begin(int _baudrate)
     {
@@ -41,7 +49,12 @@ public:
 
     Message get_next_message()
     {
-        //TODO : more descriptive function name
+        // Get the priority messages before anything else
+        if (!priority_in_messages.is_empty())
+        {
+            Message result = priority_in_messages.dequeue();
+        }
+        
         return in_messages.dequeue();
     }
 
@@ -139,11 +152,19 @@ private:
 
     void validate_message(Message& message)
     {
-        if (!message.data.equals(""))
-            in_messages.enqueue(message);
+        if (!message.data.equals("")) // currently this is the only qualification for a message being valid
+        {
+            // Check if the frameID is listed in the priority messages
+            if (priority_ids[message.frameID])
+                priority_in_messages.enqueue(message);
+            else
+                in_messages.enqueue(message);
+        }
     }
 
     Queue<Message> in_messages;
+    Queue<Message> priority_in_messages;
+    bool priority_ids[MAX_QUEUE_SIZE];  // Each index into this array represents an id, if the value is true then it is a priority message
     Message out_messages[MAX_QUEUE_SIZE];
 
     uint8_t next_message_id = 0;

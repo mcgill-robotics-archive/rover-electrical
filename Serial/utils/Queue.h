@@ -46,6 +46,13 @@ public:
         return result;
     }
 
+    bool is_empty()
+    {
+        if (front == nullptr) return true;
+
+        return false;
+    }
+
 private:
     QueueNode* front;
     QueueNode* back;
