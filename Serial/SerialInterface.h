@@ -64,7 +64,7 @@ public:
         Message message = { 
             .systemID = ID, 
             .frameID = next_message_id, 
-            .checksum = crc8(payload, strlen(payload)),
+            .checksum = crc8ccitt(payload, strlen(payload)),
             .frameType = frameType, 
             .data = String(payload) }; 
 
@@ -157,7 +157,7 @@ private:
         {
 
             // If the checksum doesn't match, break
-            if (message.checksum != crc8(message.data.c_str(), message.data.length()))
+            if (message.checksum != crc8ccitt(message.data.c_str(), message.data.length()))
                 return;
                 
 
