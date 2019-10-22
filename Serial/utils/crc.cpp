@@ -1,6 +1,10 @@
 #include "utils/crc.h"
 
-static const uint8_t CRC_TABLE[256] = {
+/**
+ * https://www.3dbrew.org/wiki/CRC-8-CCITT
+ */
+
+static const uint8_t CRC_TABLE[256] PROGMEM = {
     0x00, 0x07, 0x0E, 0x09, 0x1C, 0x1B, 0x12, 0x15,
     0x38, 0x3F, 0x36, 0x31, 0x24, 0x23, 0x2A, 0x2D,
     0x70, 0x77, 0x7E, 0x79, 0x6C, 0x6B, 0x62, 0x65,
@@ -42,7 +46,7 @@ uint8_t crc8ccitt(const void * data, size_t size) {
 	uint8_t * end = pos + size;
 
 	while (pos < end) {
-		val = CRC_TABLE[val ^ *pos];
+        val = pgm_read_byte_near(CRC_TABLE +  (val ^ *pos));
 		pos++;
 	}
 
