@@ -64,7 +64,7 @@ public:
         Message message = { 
             .systemID = ID, 
             .frameID = next_message_id, 
-            .checksum = '3', // TODO: implement checksum
+            .checksum = crc8(payload, strlen(payload)),
             .frameType = frameType, 
             .data = String(payload) }; 
 
@@ -155,7 +155,13 @@ private:
     {
         if (!message.data.equals("")) // currently this is the only qualification for a message being valid
         {
-            // Check if the frameID is listed in the priority messages
+
+            // If the checksum doesn't match, break
+            if (message.checksum != crc8(message.data.c_str(), message.data.length()))
+                return;
+                
+
+            // By now the message will be valid so place it in the proper queue:
             if (priority_ids[message.frameID])
                 priority_in_messages.enqueue(message);
             else

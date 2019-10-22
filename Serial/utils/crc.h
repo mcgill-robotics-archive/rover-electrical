@@ -5,11 +5,11 @@
  * https://barrgroup.com/Embedded-Systems/How-To/CRC-Calculation-C-Code
  */
 
-#define POLYNOMIAL 0x9B // 0x9b
 #define WIDTH  (8 * sizeof(uint8_t))
 #define TOPBIT (1 << (WIDTH - 1))
 
 // TODO: Store this table in flash memory
+// This is the table for the polynomial 0x9B
 const uint8_t crcTable[256] = {
     0x0, 0x9B, 0xAD, 0x36, 0xC1, 0x5A, 0x6C, 0xF7, 0x19, 0x82,
     0xB4, 0x2F, 0xD8, 0x43, 0x75, 0xEE, 0x32, 0xA9, 0x9F, 0x4,
@@ -51,3 +51,18 @@ uint8_t crc8(uint8_t const message[], int nBytes)
 
     return (remainder);
 }
+
+uint8_t crc8(char const message[], int nBytes)
+{
+    uint8_t data;
+    uint8_t remainder = 0;
+
+    for (int byte = 0; byte < nBytes; ++byte)
+    {
+        data = message[byte] ^ (remainder >> (WIDTH - 8));
+        remainder = crcTable[data] ^ (remainder << 8);
+    }
+
+    return (remainder);
+}
+
