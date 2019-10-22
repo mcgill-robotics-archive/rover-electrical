@@ -1,11 +1,15 @@
 #pragma once
 #include <Arduino.h> // for fixed size int
 
+/*
+ * https://barrgroup.com/Embedded-Systems/How-To/CRC-Calculation-C-Code
+ */
+
 #define POLYNOMIAL 0x9B // 0x9b
 #define WIDTH  (8 * sizeof(uint8_t))
 #define TOPBIT (1 << (WIDTH - 1))
 
-// Store this table in flash memory
+// TODO: Store this table in flash memory
 const uint8_t crcTable[256] = {
     0x0, 0x9B, 0xAD, 0x36, 0xC1, 0x5A, 0x6C, 0xF7, 0x19, 0x82,
     0xB4, 0x2F, 0xD8, 0x43, 0x75, 0xEE, 0x32, 0xA9, 0x9F, 0x4,
