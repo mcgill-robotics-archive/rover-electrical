@@ -140,7 +140,6 @@ void SerialInterface::process_incoming(const byte in_byte)
 
 bool SerialInterface::validate_message(Message& message)
 {
-    Serial.println(message.data.c_str());
     // An empty message is invalid
     if (message.data.equals(""))
         return false;
