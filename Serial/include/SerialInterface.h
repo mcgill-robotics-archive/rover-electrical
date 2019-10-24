@@ -6,13 +6,6 @@
 #define MAX_QUEUE_SIZE 32
 #define ID '0'
 
-enum SerialStates
-{
-    S_WAITING,          // Waiting to receive start byte
-    S_READING_HEADER,   // Reading n-bytes of header
-    S_READING_PAYLOAD   // Reading payload until stop byte 
-};
-
 // Store message information for processing
 struct Message
 {
@@ -23,156 +16,66 @@ struct Message
     String data;
 };
 
+/**
+ * Serial Interface to establish connection and communicate with
+ * devices using the McGill Robotics Rover Serial Frame standard
+ */
 class SerialInterface
 {
 public:
-    SerialInterface()
-    {
-        // initialize the array to false
-        for (uint8_t i = 0; i < MAX_QUEUE_SIZE; i++)
-        {
-            priority_ids[i] = false;
-        }
-    }
+    SerialInterface();
 
-    void begin(int _baudrate)
-    {
-        Serial.begin(_baudrate);
-    }
+    /**
+     * Initialize the serial connection.
+     * @param _baudrate the baudrate to use
+     */
+    void begin(int _baudrate);
 
-    void update()
-    {
-        while (Serial.available() > 0)
-        {
-            process_incoming(Serial.read());
-        }
-    }
+    /**
+     * Process incoming and outgoing data each loop iteration.
+     */
+    void update();
 
-    Message get_next_message()
-    {
-        // Get the priority messages before anything else
-        if (!priority_in_messages.is_empty())
-        {
-            Message result = priority_in_messages.dequeue();
-        }
-        
-        return in_messages.dequeue();
-    }
+    /**
+     * Get the next message in the queue. If there are any
+     * priority messages, pop from that queue before regular messages.
+     * @return the next message in the queue
+     */
+    Message get_next_message();
 
-    void send_message(uint8_t frameType, const char* payload)
-    {
-        Message message = { 
-            .systemID = ID, 
-            .frameID = next_message_id, 
-            .checksum = crc8ccitt(payload, strlen(payload)),
-            .frameType = frameType, 
-            .data = String(payload) }; 
-
-        out_messages[next_message_id++] = message;
-
-        next_message_id %= MAX_QUEUE_SIZE;
-        Serial.flush(); //TODO: non-blocking
-        Serial.println(encode_message(message));
-    }
-
-    String encode_message(const Message& message)
-    {
-        String result;
-        result.reserve(sizeof(char) * (6 + message.data.length()));
-
-        result += '~';
-        result += (char)message.systemID;
-        result += (char)message.frameID;
-        result += (char)message.checksum;
-        result += (char)message.frameType;
-        result += message.data;
-        result += "#";
-
-        return result;
-    }
+    /**
+     * Send a message over the serial connection.
+     * @param frameType Indicates which type of frame this message is.
+     * @param payload Message payload
+     */
+    void send_message(uint8_t frameType, const char* payload);
 
 private:
-    void process_incoming(const byte in_byte)
-    {
-        static Message message;
-        static SerialStates state = S_WAITING;
-        static unsigned int header_pos = 0;
+    /**
+     * FSM which processing incoming binary data and packages it into Messages.
+     */
+    void process_incoming(const byte in_byte);
 
-        switch (state)
-        {
-            case S_WAITING: // Waiting for start of a new packet
-                // if expecting a packet and byte is not start byte, break.
-                if (in_byte != '~') break;
-                state = S_READING_HEADER;
-                header_pos = 0;
-                break;
-            case S_READING_HEADER: // Reading the header information for a packet.
-                if (in_byte == '#') // If the end byte is read, break.
-                {
-                    message = Message();
-                    state = S_WAITING;
-                    break;
-                }
-                switch (header_pos)
-                {
-                    case 0:
-                        message.systemID = in_byte;
-                        header_pos++;
-                        break;
-                    case 1:
-                        message.frameID = in_byte;
-                        header_pos++;
-                        break;
-                    case 2:
-                        message.checksum = in_byte;
-                        header_pos++;
-                        break;
-                    case 3:
-                        message.frameType = in_byte;
-                        state = S_READING_PAYLOAD;
-                        break;
-                    default:
-                        break;
-                }
-                break;
-            case S_READING_PAYLOAD:
-                if (in_byte == '#') // If the end byte is read, process the message and break.
-                {
-                    validate_message(message);
-                    message = Message();
-                    state = S_WAITING;
-                    break;
-                }
-                else
-                {
-                    message.data = message.data + (char)in_byte;
-                    break;
-                }
-        }
-    }
+    // TODO: rewrite outgoing interface
+    String package_frame(const Message& message);
 
-    void validate_message(Message& message)
-    {
-        if (!message.data.equals("")) // currently this is the only qualification for a message being valid
-        {
+    /**
+     * Validates an incoming message by comparing with validity criteria:
+     * 1. Checksum
+     * 2. non-empty
+     * @return returns true if a message is valid
+     */
+    bool validate_message(Message& message);
 
-            // If the checksum doesn't match, break
-            if (message.checksum != crc8ccitt(message.data.c_str(), message.data.length()))
-                return;
-                
-
-            // By now the message will be valid so place it in the proper queue:
-            if (priority_ids[message.frameID])
-                priority_in_messages.enqueue(message);
-            else
-                in_messages.enqueue(message);
-        }
-    }
-
+    /** This queue stores all the incoming messages that have not yet been processed. **/
     Queue<Message> in_messages;
+    /** This queue stores all the incoming _priority_ messages that have not yet been processed. **/
     Queue<Message> priority_in_messages;
-    bool priority_ids[MAX_QUEUE_SIZE];  // Each index into this array represents an id, if the value is true then it is a priority message
+    /** For each frame id, the value of this array is set to true if the corresponding message is a priority message.**/
+    bool priority_ids[MAX_QUEUE_SIZE];
+    /** A cache of the last (MAX_QUEUE_SIZE) messages. **/
     Message out_messages[MAX_QUEUE_SIZE];
 
+    /** The frame id for the next message that will be sent. **/
     uint8_t next_message_id = 0;
 };
