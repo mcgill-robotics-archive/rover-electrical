@@ -81,10 +81,10 @@ public:
         result.reserve(sizeof(char) * (6 + message.data.length()));
 
         result += '~';
-        result += message.systemID;
-        result += message.frameID;
-        result += message.checksum;
-        result += message.frameType;
+        result += (char)message.systemID;
+        result += (char)message.frameID;
+        result += (char)message.checksum;
+        result += (char)message.frameType;
         result += message.data;
         result += "#";
 
