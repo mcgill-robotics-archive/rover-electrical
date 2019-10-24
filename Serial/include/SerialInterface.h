@@ -52,9 +52,14 @@ public:
 
 private:
     /**
-     * FSM which processing incoming binary data and packages it into Messages.
+     * FSM which processes incoming binary data and packages it into Messages.
      */
     void process_incoming(const byte in_byte);
+
+    /**
+     * FSM which writes the next byte.
+     */
+    void process_outgoing();
 
     // TODO: rewrite outgoing interface
     String package_frame(const Message& message);
@@ -67,14 +72,16 @@ private:
      */
     bool validate_message(Message& message);
 
-    /** This queue stores all the incoming messages that have not yet been processed. **/
+    /** This queue stores all the incoming messages which have not yet been processed. **/
     Queue<Message> in_messages;
     /** This queue stores all the incoming _priority_ messages that have not yet been processed. **/
     Queue<Message> priority_in_messages;
+    /** This queue stores all outgoing messages which have not yet been processed. **/
+    Queue<Message> out_messages;
     /** For each frame id, the value of this array is set to true if the corresponding message is a priority message.**/
     bool priority_ids[MAX_QUEUE_SIZE];
     /** A cache of the last (MAX_QUEUE_SIZE) messages. **/
-    Message out_messages[MAX_QUEUE_SIZE];
+    Message message_cache[MAX_QUEUE_SIZE];
 
     /** The frame id for the next message that will be sent. **/
     uint8_t next_message_id = 0;

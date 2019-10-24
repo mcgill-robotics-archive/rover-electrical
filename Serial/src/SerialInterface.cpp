@@ -7,6 +7,13 @@ enum SerialReadStates
     SR_READING_PAYLOAD   // Reading payload until stop byte 
 };
 
+enum SerialWriteStates
+{
+    SW_WAITING,
+    SW_WRITING_HEADER,
+    SW_WRITING_PAYLOAD
+};
+
 SerialInterface::SerialInterface()
 {
     // initialize the array to false
@@ -23,9 +30,16 @@ void SerialInterface::begin(int _baudrate)
 
 void SerialInterface::update()
 {
+    // While the input buffer has at least 1 byte, read and process
     while (Serial.available() > 0)
     {
         process_incoming(Serial.read());
+    }
+
+    // While the output buffer has room for at least 1 byte, process and write
+    if (Serial.availableForWrite() > 0)
+    {
+        process_outgoing();
     }
 }
 
@@ -49,11 +63,11 @@ void SerialInterface::send_message(uint8_t frameType, const char* payload)
         .frameType = frameType, 
         .data = String(payload) }; 
 
-    out_messages[next_message_id++] = message;
+    message_cache[next_message_id++] = message;
 
     next_message_id %= MAX_QUEUE_SIZE;
-    Serial.flush(); //TODO: non-blocking
-    Serial.println(package_frame(message));
+    
+    out_messages.enqueue(message);
 }
 
 String SerialInterface::package_frame(const Message& message)
@@ -135,6 +149,60 @@ void SerialInterface::process_incoming(const byte in_byte)
                 message.data = message.data + (char)in_byte;
                 break;
             }
+    }
+}
+
+void SerialInterface::process_outgoing()
+{
+    static Message message;
+    static SerialWriteStates state = SW_WAITING;
+    static uint16_t pos = 0;
+
+    switch (state)
+    {
+        case SW_WAITING:
+            if (!out_messages.is_empty()) // if there is a message to be sent
+            {
+                message = out_messages.dequeue();
+                state = SW_WRITING_HEADER;
+                pos = 0;
+                Serial.write('~'); // start writing data on next pass
+            }
+            break;
+        case SW_WRITING_HEADER:
+            switch (pos)
+            {
+                case 0: // SysID
+                    pos++;
+                    Serial.write(message.systemID);
+                    break;
+                case 1: // FrameID
+                    pos++;
+                    Serial.write(message.frameID);
+                    break;
+                case 2: // Checksum
+                    pos++;
+                    Serial.write(message.checksum);
+                    break;
+                case 3: // Frametype
+                    pos = 0; // reset position for use in payload
+                    state = SW_WRITING_PAYLOAD;
+                    Serial.write(message.frameType);
+                    break;
+            }
+            break;
+        case SW_WRITING_PAYLOAD:
+            if (pos < message.data.length())
+            {
+                Serial.write(message.data[pos++]);
+            }
+            else
+            {
+                state = SW_WAITING;
+                pos = 0;
+                Serial.write('#');
+            }
+            break;
     }
 }
 
