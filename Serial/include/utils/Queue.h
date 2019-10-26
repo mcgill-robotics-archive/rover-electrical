@@ -46,6 +46,13 @@ public:
         return result;
     }
 
+    T peek()
+    {
+        if (front == nullptr) return T();
+
+        return front->data;
+    }
+
     bool is_empty()
     {
         if (front == nullptr) return true;

@@ -37,19 +37,20 @@ void SerialInterface::update()
     }
 
     // While the output buffer has room for at least 1 byte, process and write
-    if (Serial.availableForWrite() > 0)
+    while(Serial.availableForWrite() > 0 && !out_messages.is_empty())
     {
         process_outgoing();
+        Serial.flush();
     }
 }
 
 Message SerialInterface::get_next_message()
 {
     // Get the priority messages before anything else
-    if (!priority_in_messages.is_empty())
-    {
-        Message result = priority_in_messages.dequeue();
-    }
+    // if (!priority_in_messages.is_empty())
+    // {
+    //     Message result = priority_in_messages.dequeue();
+    // }
     
     return in_messages.dequeue();
 }
@@ -69,6 +70,23 @@ void SerialInterface::send_message(uint8_t frameType, const char* payload)
     
     out_messages.enqueue(message);
 }
+
+void SerialInterface::send_message(uint8_t frameType, String& payload)
+{
+    Message message = { 
+        .systemID = ID, 
+        .frameID = next_message_id, 
+        .checksum = crc8ccitt(payload.c_str(), payload.length()),
+        .frameType = frameType, 
+        .data = payload }; 
+
+    message_cache[next_message_id++] = message;
+
+    next_message_id %= MAX_QUEUE_SIZE;
+    
+    out_messages.enqueue(message);
+}
+
 
 String SerialInterface::package_frame(const Message& message)
 {
@@ -135,9 +153,9 @@ void SerialInterface::process_incoming(const byte in_byte)
                 if (validate_message(message))
                 {
                     // If the message is valid, place it in the proper queue
-                    if (priority_ids[message.frameID])
-                        priority_in_messages.enqueue(message);
-                    else
+                    // if (priority_ids[message.frameID])
+                    //     priority_in_messages.enqueue(message);
+                    // else
                         in_messages.enqueue(message);
                 }
                 message = Message();
@@ -154,53 +172,54 @@ void SerialInterface::process_incoming(const byte in_byte)
 
 void SerialInterface::process_outgoing()
 {
-    static Message message;
-    static SerialWriteStates state = SW_WAITING;
-    static uint16_t pos = 0;
+    static Message message_out;
+    static SerialWriteStates state_write = SW_WAITING;
+    static uint16_t pos_out = 0;
 
-    switch (state)
+    switch (state_write)
     {
         case SW_WAITING:
             if (!out_messages.is_empty()) // if there is a message to be sent
             {
-                message = out_messages.dequeue();
-                state = SW_WRITING_HEADER;
-                pos = 0;
+                message_out = out_messages.peek();
+                state_write = SW_WRITING_HEADER;
+                pos_out = 0;
                 Serial.write('~'); // start writing data on next pass
             }
             break;
         case SW_WRITING_HEADER:
-            switch (pos)
+            switch (pos_out)
             {
                 case 0: // SysID
-                    pos++;
-                    Serial.write(message.systemID);
+                    pos_out++;
+                    Serial.write(message_out.systemID);
                     break;
                 case 1: // FrameID
-                    pos++;
-                    Serial.write(message.frameID);
+                    pos_out++;
+                    Serial.write(message_out.frameID);
                     break;
                 case 2: // Checksum
-                    pos++;
-                    Serial.write(message.checksum);
+                    pos_out++;
+                    Serial.write(message_out.checksum);
                     break;
                 case 3: // Frametype
-                    pos = 0; // reset position for use in payload
-                    state = SW_WRITING_PAYLOAD;
-                    Serial.write(message.frameType);
+                    pos_out = 0; // reset position for use in payload
+                    state_write = SW_WRITING_PAYLOAD;
+                    Serial.write(message_out.frameType);
                     break;
             }
             break;
         case SW_WRITING_PAYLOAD:
-            if (pos < message.data.length())
+            if (pos_out < message_out.data.length())
             {
-                Serial.write(message.data[pos++]);
+                Serial.write(message_out.data[pos_out++]);
             }
             else
             {
-                state = SW_WAITING;
-                pos = 0;
+                state_write = SW_WAITING;
+                pos_out = 0;
                 Serial.write('#');
+                out_messages.dequeue();
             }
             break;
     }

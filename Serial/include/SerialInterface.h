@@ -49,7 +49,12 @@ public:
      * @param payload Message payload
      */
     void send_message(uint8_t frameType, const char* payload);
-
+    /**
+     * Send a message over the serial connection.
+     * @param frameType Indicates which type of frame this message is.
+     * @param payload Message payload
+     */
+    void send_message(uint8_t frameType, String& payload);
 private:
     /**
      * FSM which processes incoming binary data and packages it into Messages.
@@ -62,6 +67,7 @@ private:
     void process_outgoing();
 
     // TODO: rewrite outgoing interface
+    // DEPRECATED
     String package_frame(const Message& message);
 
     /**
@@ -72,6 +78,7 @@ private:
      */
     bool validate_message(Message& message);
 
+public:
     /** This queue stores all the incoming messages which have not yet been processed. **/
     Queue<Message> in_messages;
     /** This queue stores all the incoming _priority_ messages that have not yet been processed. **/
