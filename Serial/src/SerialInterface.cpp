@@ -146,11 +146,28 @@ void SerialInterface::process_incoming(const byte in_byte)
             {
                 if (validate_message(message))
                 {
-                        in_messages.enqueue(message);
-                        // Message was valid, send an ack back
-                        String ack_payload = String(message.frameID);
-                        send_priority_message('A', ack_payload);
+                    in_messages.enqueue(message);
+                    // Message was valid, send an ack back
+                    String ack_payload = String(message.frameID);
+                    send_priority_message('A', ack_payload);
+
+                    // Current message is not the expected next message and is not the first message
+                    if (last_received_id >= 0 && message.frameID != last_received_id + 1) 
+                    {
+                        // Request all missing messages
+                        for (uint8_t i = last_received_id + 1; i < message.frameID; i++)
+                        {
+                            String request_payload = String(i);
+                            send_priority_message('R', request_payload);
+                        }
+                    }
+                    // TODO: This assumes that the requested messages will actually be
+                    //       correctly received the second time.
+                    //       If the data is corrupted again, the frames are lost.
+                    last_received_id = message.frameID;
+
                 }
+
                 message = Message();
                 state = SR_WAITING;
                 break;
@@ -275,9 +292,4 @@ void SerialInterface::send_priority_message(uint8_t frameType, const char* paylo
     next_message_id %= MAX_QUEUE_SIZE;
     
     priority_out_messages.enqueue(message);
-}
-
-void SerialInterface::request_message(uint8_t frameID)
-{
-
 }

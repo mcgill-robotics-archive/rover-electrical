@@ -68,13 +68,6 @@ public:
      */
     void send_priority_message(uint8_t frameType, const char* payload);
 
-    /**
-     * Request a message from the other device.
-     * This message will be placed in a priority queue once received.
-     * 
-     * @param frameID the id of the requested frame.
-     */
-    void request_message(uint8_t frameID);
 private:
     /**
      * FSM which processes incoming binary data and packages it into Messages.
@@ -114,4 +107,7 @@ public:
 
     /** The frame id for the next message that will be sent. **/
     uint8_t next_message_id = 0;
+
+    /** The last successful received frameID. **/
+    uint8_t last_received_id = 0;
 };

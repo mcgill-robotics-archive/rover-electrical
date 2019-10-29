@@ -3,6 +3,7 @@
 #include "utils/crc.h"
 
 SerialInterface serial;
+int i = 0;
 
 void setup() 
 {
@@ -17,19 +18,6 @@ void loop()
 
     if (!message.data.equals(""))
     {
-        Serial.print("SID: ");
-        Serial.write(message.systemID);
-        Serial.print(" FID: ");
-        Serial.write(message.frameID);
-        Serial.print(" CHK: ");
-        Serial.write(message.checksum);
-        Serial.print(" FT: ");
-        Serial.write(message.frameType);
-        Serial.println(" DATA: " + message.data);
-    }
-
-    if (!message.data.equals(""))
-    {
-        serial.send_message('1', "hello");
+        serial.send_message('1', message.data);
     }
 }
