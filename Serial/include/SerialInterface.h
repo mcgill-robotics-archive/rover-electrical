@@ -55,6 +55,26 @@ public:
      * @param payload Message payload
      */
     void send_message(uint8_t frameType, String& payload);
+
+    /**
+     * Sends a message over the serial connection _immediately_.
+     * @see send_message
+     */
+    void send_priority_message(uint8_t frameType, String& payload);
+
+    /**
+     * Sends a message over the serial connection _immediately_.
+     * @see send_message
+     */
+    void send_priority_message(uint8_t frameType, const char* payload);
+
+    /**
+     * Request a message from the other device.
+     * This message will be placed in a priority queue once received.
+     * 
+     * @param frameID the id of the requested frame.
+     */
+    void request_message(uint8_t frameID);
 private:
     /**
      * FSM which processes incoming binary data and packages it into Messages.
@@ -85,6 +105,8 @@ public:
     Queue<Message> priority_in_messages;
     /** This queue stores all outgoing messages which have not yet been processed. **/
     Queue<Message> out_messages;
+    /** This queue stores all priority outgoing messages which have not yet been processed. **/
+    Queue<Message> priority_out_messages;
     /** For each frame id, the value of this array is set to true if the corresponding message is a priority message.**/
     bool priority_ids[MAX_QUEUE_SIZE];
     /** A cache of the last (MAX_QUEUE_SIZE) messages. **/

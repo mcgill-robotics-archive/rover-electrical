@@ -37,7 +37,7 @@ void SerialInterface::update()
     }
 
     // While the output buffer has room for at least 1 byte, process and write
-    while(Serial.availableForWrite() > 0 && !out_messages.is_empty())
+    while(Serial.availableForWrite() > 0 && (!out_messages.is_empty() || !priority_out_messages.is_empty()))
     {
         process_outgoing();
         Serial.flush();
@@ -165,15 +165,25 @@ void SerialInterface::process_outgoing()
     static Message message_out;
     static SerialWriteStates state_write = SW_WAITING;
     static uint16_t pos_out = 0;
+    static bool is_priority = false;
 
     switch (state_write)
     {
         case SW_WAITING:
-            if (!out_messages.is_empty()) // if there is a message to be sent
+            if (!priority_out_messages.is_empty()) // if there is a priority message, do this first.
+            {
+                message_out = priority_out_messages.peek();
+                state_write = SW_WRITING_HEADER;
+                pos_out = 0;
+                is_priority = true;
+                Serial.write('~');
+            }
+            else if (!out_messages.is_empty()) // if there is a message to be sent
             {
                 message_out = out_messages.peek();
                 state_write = SW_WRITING_HEADER;
                 pos_out = 0;
+                is_priority = false;
                 Serial.write('~'); // start writing data on next pass
             }
             break;
@@ -209,7 +219,10 @@ void SerialInterface::process_outgoing()
                 state_write = SW_WAITING;
                 pos_out = 0;
                 Serial.write('#');
-                out_messages.dequeue();
+                if (is_priority)
+                    priority_out_messages.dequeue();
+                else
+                    out_messages.dequeue();
             }
             break;
     }
@@ -226,4 +239,42 @@ bool SerialInterface::validate_message(Message& message)
         return false;
 
     return true;
+}
+
+
+void SerialInterface::send_priority_message(uint8_t frameType, String& payload)
+{
+    Message message = { 
+        .systemID = ID, 
+        .frameID = next_message_id, 
+        .checksum = crc8ccitt(payload.c_str(), payload.length()),
+        .frameType = frameType, 
+        .data = payload }; 
+
+    message_cache[next_message_id++] = message;
+
+    next_message_id %= MAX_QUEUE_SIZE;
+    
+    priority_out_messages.enqueue(message);
+}
+
+void SerialInterface::send_priority_message(uint8_t frameType, const char* payload)
+{
+    Message message = { 
+        .systemID = ID, 
+        .frameID = next_message_id, 
+        .checksum = crc8ccitt(payload, strlen(payload)),
+        .frameType = frameType, 
+        .data = String(payload) }; 
+
+    message_cache[next_message_id++] = message;
+
+    next_message_id %= MAX_QUEUE_SIZE;
+    
+    priority_out_messages.enqueue(message);
+}
+
+void SerialInterface::request_message(uint8_t frameID)
+{
+
 }
