@@ -45,13 +45,7 @@ void SerialInterface::update()
 }
 
 Message SerialInterface::get_next_message()
-{
-    // Get the priority messages before anything else
-    // if (!priority_in_messages.is_empty())
-    // {
-    //     Message result = priority_in_messages.dequeue();
-    // }
-    
+{  
     return in_messages.dequeue();
 }
 
@@ -152,10 +146,6 @@ void SerialInterface::process_incoming(const byte in_byte)
             {
                 if (validate_message(message))
                 {
-                    // If the message is valid, place it in the proper queue
-                    // if (priority_ids[message.frameID])
-                    //     priority_in_messages.enqueue(message);
-                    // else
                         in_messages.enqueue(message);
                 }
                 message = Message();
