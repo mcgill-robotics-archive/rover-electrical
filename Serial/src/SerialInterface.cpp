@@ -147,6 +147,9 @@ void SerialInterface::process_incoming(const byte in_byte)
                 if (validate_message(message))
                 {
                         in_messages.enqueue(message);
+                        // Message was valid, send an ack back
+                        String ack_payload = String(message.frameID);
+                        send_priority_message('A', ack_payload);
                 }
                 message = Message();
                 state = SR_WAITING;
