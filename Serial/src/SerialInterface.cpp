@@ -170,20 +170,14 @@ void SerialInterface::handle_received_message(Message& message)
     {
         uint8_t requested_id = message.data.toInt();
         retransmit_message(requested_id);
-        return; 
-    }
-
-    // If the message is a "ACK" message
-    if (message.frameType == 'A')
+    } 
+    else if (message.frameType == 'A')  // If the message is a "ACK" message
     {
         uint8_t acked_id = message.data.toInt();
         free_message(acked_id);
-        return;
     }
-
-    // Otherwise the message is just generic
-    // NOTE: this block must remain at the bottom of the function
-    {   // Handle generic messages
+    else // Otherwise the message is just generic
+    {
         String ack_payload = String(message.frameID);
         send_priority_message('A', ack_payload);
 
