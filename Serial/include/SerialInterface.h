@@ -75,6 +75,11 @@ private:
     void process_incoming(const byte in_byte);
 
     /**
+     * Intermediate function which passes a completed message to the correct place.
+     */
+    void handle_received_message(Message& message);
+
+    /**
      * FSM which writes the next byte.
      */
     void process_outgoing();
@@ -91,7 +96,17 @@ private:
      */
     bool validate_message(Message& message);
 
-public:
+    /**
+     * Handles requesting missed or failed messages from other device
+     */
+    void retransmit_message(uint8_t id);
+
+    /**
+     * Frees a message and it's ID from the outgoing cache.
+     * This happens when an ack is received.
+     */
+    void free_message(uint8_t id);
+
     /** This queue stores all the incoming messages which have not yet been processed. **/
     Queue<Message> in_messages;
     /** This queue stores all the incoming _priority_ messages that have not yet been processed. **/
@@ -107,7 +122,7 @@ public:
 
     /** The frame id for the next message that will be sent. **/
     uint8_t next_message_id = 0;
-
-    /** The last successful received frameID. **/
-    uint8_t last_received_id = 0;
+    
+    /** The last message for which an ACK was received. **/
+    uint8_t last_successfull_transmitted_id = 0;
 };
