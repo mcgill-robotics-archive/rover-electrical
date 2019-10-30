@@ -280,7 +280,8 @@ bool SerialInterface::validate_message(Message& message)
         return false;
 
     // Check against the checksum
-    if (message.checksum != crc8ccitt(message.data.c_str(), message.data.length()))
+    String string_to_check = String(message.frameType) + message.data;
+    if (message.checksum != crc8ccitt(string_to_check.c_str(), string_to_check.length()))
         return false;
 
     return true;
