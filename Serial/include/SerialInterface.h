@@ -122,6 +122,9 @@ private:
 
     /** The frame id for the next message that will be sent. **/
     uint8_t next_message_id = 0;
+
+    /** The last message which was received and an ACK was sent back for. **/
+    uint8_t last_received_id = 0;
     
     /** The last message for which an ACK was received. **/
     uint8_t last_successfull_transmitted_id = 0;
