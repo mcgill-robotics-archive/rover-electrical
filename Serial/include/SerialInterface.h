@@ -84,28 +84,31 @@ private:
      */
     void process_outgoing();
 
-    // TODO: rewrite outgoing interface
-    // DEPRECATED
-    String package_frame(const Message& message);
-
     /**
      * Validates an incoming message by comparing with validity criteria:
      * 1. Checksum
      * 2. non-empty
-     * @return returns true if a message is valid
+     * @return returns true if a message is valid.
      */
     bool validate_message(Message& message);
 
     /**
-     * Handles requesting missed or failed messages from other device
+     * Resets the sliding window from a given id and pushes all messages out.
+     * @param id the id from which to begin retransmission.
      */
-    void retransmit_message(uint8_t id);
+    void reset_window(uint8_t id);
 
     /**
-     * Frees a message and it's ID from the outgoing cache.
-     * This happens when an ack is received.
+     * Request that the window be reset at given frame id.
+     * @param id the id from which the other should begin retransmissions.
      */
-    void free_message(uint8_t id);
+    void request_retransmission(uint8_t id);
+
+    /**
+     * Send out an ack frame for a given frame id.
+     * @param id id of the acknowledged message.
+     */
+    void ack_message(uint8_t id);
 
     /** This queue stores all the incoming messages which have not yet been processed. **/
     Queue<Message> in_messages;
@@ -121,11 +124,11 @@ private:
     Message message_cache[MAX_QUEUE_SIZE];
 
     /** The frame id for the next message that will be sent. **/
-    uint8_t next_message_id = 0;
+    uint8_t next_outgoing_frame_id = 0;
 
-    /** The last message which was received and an ACK was sent back for. **/
-    uint8_t last_received_id = 0;
-    
-    /** The last message for which an ACK was received. **/
-    uint8_t last_successfull_transmitted_id = 0;
+    /** The expected frame id for the next incoming message. **/
+    uint8_t expected_frame_id = 0;
+
+    /** The id of the last frame we received an acknowledge for. **/
+    uint8_t last_acked_frame = 0;
 };

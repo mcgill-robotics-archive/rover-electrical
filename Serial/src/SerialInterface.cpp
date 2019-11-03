@@ -53,16 +53,16 @@ void SerialInterface::send_message(uint8_t frameType, const char* payload)
 {
     Message message = { 
         .systemID = ID, 
-        .frameID = next_message_id, 
+        .frameID = next_outgoing_frame_id, 
         .checksum = crc8ccitt(payload, strlen(payload)),
         .frameType = frameType, 
         .data = String(payload) }; 
 
     if (frameType != 'R' && frameType != 'A')
     {
-        message_cache[next_message_id++] = message;
+        message_cache[next_outgoing_frame_id++] = message;
 
-        next_message_id %= MAX_QUEUE_SIZE;
+        next_outgoing_frame_id %= MAX_QUEUE_SIZE;
     }
     
     out_messages.enqueue(message);
@@ -73,22 +73,6 @@ void SerialInterface::send_message(uint8_t frameType, String& payload)
     send_message(frameType, payload.c_str());
 }
 
-
-String SerialInterface::package_frame(const Message& message)
-{
-    String result;
-    result.reserve(sizeof(char) * (6 + message.data.length()));
-
-    result += '~';
-    result += (char)message.systemID;
-    result += (char)message.frameID;
-    result += (char)message.checksum;
-    result += (char)message.frameType;
-    result += message.data;
-    result += "#";
-
-    return result;
-}
 
 void SerialInterface::process_incoming(const byte in_byte)
 {
@@ -160,34 +144,37 @@ void SerialInterface::handle_received_message(Message& message)
     // If the message is a "RQ" message
     if (message.frameType == 'R')
     {
+        // TODO: this quantity should be stored under message.frameID
         uint8_t requested_id = message.data.toInt();
-        retransmit_message(requested_id);
+        reset_window(requested_id);
     } 
     else if (message.frameType == 'A')  // If the message is a "ACK" message
     {
+        // TODO: this quantity should be stored under message.frameID.
         uint8_t acked_id = message.data.toInt();
-        free_message(acked_id);
+        /*
+         * Register the id as the last successfully received frame so we know
+         * where to reset the sliding window to in the event of a failure.
+         */
+        last_acked_frame = acked_id;
     }
     else // Otherwise the message is just generic
     {
-        String ack_payload = String(message.frameID);
-        send_priority_message('A', ack_payload);
-
-        // Current message is not the expected next message so request everything in between
-        if (last_received_id >= 0 && message.frameID != last_received_id + 1) 
+        // Before anything happens, ensure that the received message
+        // has the expected id. If not, request that the window be reset
+        // at the expected id and do not continue
+        if (message.frameID != expected_frame_id)
         {
-            for (uint8_t i = last_received_id + 1; i < message.frameID; i++)
-            {
-                String request_payload = String(i);
-                send_priority_message('R', request_payload);
-            }
+            request_retransmission(expected_frame_id);
+            return; // do not continue
         }
 
-        // TODO: This assumes that the requested messages will actually be
-        //       correctly received the second time.
-        //       If the data is corrupted again, the frames are lost.
-        last_received_id = message.frameID;
+        // The message is received in the correct order,
+        // send an ack and add it to the queue
+        ack_message(message.frameID);
         in_messages.enqueue(message);
+        // Then set the expected frame id. This quantity will wrap around the size of a queue
+        expected_frame_id = (message.frameID + 1) % MAX_QUEUE_SIZE;
     }
 }
 
@@ -282,59 +269,36 @@ void SerialInterface::send_priority_message(uint8_t frameType, const char* paylo
 {
     Message message = { 
         .systemID = ID, 
-        .frameID = next_message_id, 
+        .frameID = next_outgoing_frame_id, 
         .checksum = crc8ccitt(payload, strlen(payload)),
         .frameType = frameType, 
         .data = String(payload) }; 
 
     if (frameType != 'A' && frameType != 'R')
     {
-        message_cache[next_message_id++] = message;
+        message_cache[next_outgoing_frame_id++] = message;
 
-        next_message_id %= MAX_QUEUE_SIZE;
+        next_outgoing_frame_id %= MAX_QUEUE_SIZE;
     }
     
     priority_out_messages.enqueue(message);
 }
 
-void SerialInterface::retransmit_message(uint8_t id)
+void SerialInterface::reset_window(uint8_t id)
 {
-    /*
-     * If a message is requested and the message prior (this.id = last.id + 1) was
-     * successfully ackowledged we just retransmit the requested message. 
-     * However, if there is a gap, retransmit all messages in between. 
-     */
-
-    priority_out_messages.enqueue(message_cache[id]);
-    
-    /*
-
-    // Take the % queue_size to account for the circular array here
-    if (id == (last_successfull_transmitted_id + 1) % MAX_QUEUE_SIZE) 
-    {
-        // Get the id of the requested message from the data field
-        // Queue up the message in the priority queue.
+    // Send out all missed messages again
         priority_out_messages.enqueue(message_cache[id]);
-    }
-    else // Here we enter the case where there was a gap between the last ack'd message
-    {
-        // Request all missing messages and the requested message.
-        uint8_t i = (last_successfull_transmitted_id + 1) % MAX_QUEUE_SIZE;
-        while (i != id)
-        {
-            priority_out_messages.enqueue(message_cache[i]);
-            i = (i + 1) % MAX_QUEUE_SIZE;
-        }
-    }
-    */
+
 }
 
-void SerialInterface::free_message(uint8_t id)
+void SerialInterface::request_retransmission(uint8_t id)
 {
-    // TODO: This
-    //if (id != last_successfull_transmitted_id + 1)
-    //{
-    //    retransmit_message(id - 1);
-    //}
-    last_successfull_transmitted_id = id;
+    String rq_payload = String(id);
+    send_message('R', rq_payload);
+}
+
+void SerialInterface::ack_message(uint8_t id)
+{
+    String ack_payload = String(id);
+    send_message('A', ack_payload);
 }
