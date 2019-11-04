@@ -4,7 +4,6 @@
 #include "utils/crc.h"
 
 #define MAX_QUEUE_SIZE 32
-#define ID '0'
 
 // Store message information for processing
 struct Message

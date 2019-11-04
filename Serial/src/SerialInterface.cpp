@@ -54,7 +54,7 @@ Message SerialInterface::get_next_message()
 void SerialInterface::send_message(uint8_t frameType, const char* payload)
 {
     Message message = { 
-        .systemID = ID, 
+        .systemID = system_id, 
         .frameID = next_outgoing_frame_id, 
         .checksum = crc8ccitt(payload, strlen(payload)),
         .frameType = frameType, 
@@ -258,7 +258,7 @@ bool SerialInterface::validate_message(Message& message)
 void SerialInterface::send_priority_message(uint8_t frameType, const char* payload)
 {
     Message message = { 
-        .systemID = ID, 
+        .systemID = system_id, 
         .frameID = next_outgoing_frame_id, 
         .checksum = crc8ccitt(payload, strlen(payload)),
         .frameType = frameType, 
@@ -284,12 +284,24 @@ void SerialInterface::reset_window(uint8_t id)
 
 void SerialInterface::request_retransmission(uint8_t id)
 {
-    String rq_payload = String(id);
-    send_message('R', rq_payload.c_str());
+    Message rq {
+        .systemID = system_id,
+        .frameID = id,
+        .checksum = 0xb9, // precomputed checksum for 'R'
+        .frameType = 'R',
+        .data = String("") };
+    
+    priority_out_messages.enqueue(rq);
 }
 
 void SerialInterface::ack_message(uint8_t id)
 {
-    String ack_payload = String(id);
-    send_message('A', ack_payload.c_str());
+    Message ack = {
+        .systemID = system_id,
+        .frameID = id,
+        .checksum = 0xc0, // precomputed checksum for 'A'
+        .frameType = 'A',
+        .data = String("") };
+
+    priority_out_messages.enqueue(ack);
 }
