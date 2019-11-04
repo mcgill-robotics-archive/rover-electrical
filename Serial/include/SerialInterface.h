@@ -23,13 +23,11 @@ struct Message
 class SerialInterface
 {
 public:
-    SerialInterface();
-
+    SerialInterface(int _baudrate, uint8_t _sys_id);
     /**
      * Initialize the serial connection.
-     * @param _baudrate the baudrate to use
      */
-    void begin(int _baudrate);
+    void begin();
 
     /**
      * Process incoming and outgoing data each loop iteration.
@@ -131,4 +129,8 @@ private:
 
     /** The id of the last frame we received an acknowledge for. **/
     uint8_t last_acked_frame = 0;
+
+    /* Connection params */
+    const int baudrate;
+    const uint8_t system_id;
 };

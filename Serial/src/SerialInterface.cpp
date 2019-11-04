@@ -14,7 +14,9 @@ enum SerialWriteStates
     SW_WRITING_PAYLOAD
 };
 
-SerialInterface::SerialInterface()
+SerialInterface::SerialInterface(int _baudrate, uint8_t sys_id) :
+    baudrate(_baudrate),
+    system_id(sys_id)
 {
     // initialize the array to false
     for (uint8_t i = 0; i < MAX_QUEUE_SIZE; i++)
@@ -23,9 +25,9 @@ SerialInterface::SerialInterface()
     }
 }
 
-void SerialInterface::begin(int _baudrate)
+void SerialInterface::begin()
 {
-    Serial.begin(_baudrate);
+    Serial.begin(baudrate);
 }
 
 void SerialInterface::update()
