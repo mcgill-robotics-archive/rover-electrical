@@ -50,7 +50,7 @@ public:
 private:
     /**
      * Enqueue a message in it's respective queue.
-     * If the message is a special type, push it to priority queue
+     * If the message is a control type, push it to priority queue
      * otherwise push it to regular queue.
      * @param message the message to send
      */
@@ -62,11 +62,10 @@ private:
     bool is_priority(const Message& message);
 
     /**
-     * Returns true if the given message is a special message.
-     * A special message is a message with special meaning in the protocol.
+     * Returns true if the given message is a control message.
      * An example of such a message would be the 'ACK' or 'RQ' messages.
      */
-    bool is_special(const Message& message);
+    bool is_control(const Message& message);
     
     /**
      * FSM which processes incoming binary data and packages it into Messages.

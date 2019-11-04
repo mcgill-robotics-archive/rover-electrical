@@ -82,8 +82,8 @@ void SerialInterface::enqueue_message(Message& message)
 }
 bool SerialInterface::is_priority(const Message& message)
 {
-    // If the message is a special type, it is priority 
-    if (is_special(message))
+    // If the message is a control type, it is priority 
+    if (is_control(message))
         return true;
 
     // If we are receiving the message, check it against the list of priority ids
@@ -96,9 +96,9 @@ bool SerialInterface::is_priority(const Message& message)
     return false;
 }
 
-bool SerialInterface::is_special(const Message& message)
+bool SerialInterface::is_control(const Message& message)
 {
-    // Special messages are defined only by their frametypes.
+    // control messages are defined only by their frametypes.
     switch (message.frameType)
     {
         case 'A': return true;
@@ -244,8 +244,8 @@ void SerialInterface::handle_received_message(Message& message)
         // If the message is not valid, 
         // request a retransmission of the expected frame
         
-        // Don't attempt to recover special messages
-        if (!is_special(message))
+        // Don't attempt to recover control messages
+        if (!is_control(message))
             request_retransmission(expected_frame_id);
         return;
     }
@@ -298,7 +298,7 @@ void SerialInterface::handle_received_message(Message& message)
 
 bool SerialInterface::validate_message(const Message& message)
 {
-    // Special messages are checked first
+    // control messages are checked first
     if (message.frameType == 'A' && message.checksum == 0xc0)
         return true;
     if (message.frameType == 'R' && message.checksum == 0xb9)
