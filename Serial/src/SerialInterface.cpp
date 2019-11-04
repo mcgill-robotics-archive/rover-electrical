@@ -70,12 +70,6 @@ void SerialInterface::send_message(uint8_t frameType, const char* payload)
     out_messages.enqueue(message);
 }
 
-void SerialInterface::send_message(uint8_t frameType, String& payload)
-{
-    send_message(frameType, payload.c_str());
-}
-
-
 void SerialInterface::process_incoming(const byte in_byte)
 {
     static Message message;
@@ -261,12 +255,6 @@ bool SerialInterface::validate_message(Message& message)
     return true;
 }
 
-
-void SerialInterface::send_priority_message(uint8_t frameType, String& payload)
-{
-    send_priority_message(frameType, payload.c_str());
-}
-
 void SerialInterface::send_priority_message(uint8_t frameType, const char* payload)
 {
     Message message = { 
@@ -297,11 +285,11 @@ void SerialInterface::reset_window(uint8_t id)
 void SerialInterface::request_retransmission(uint8_t id)
 {
     String rq_payload = String(id);
-    send_message('R', rq_payload);
+    send_message('R', rq_payload.c_str());
 }
 
 void SerialInterface::ack_message(uint8_t id)
 {
     String ack_payload = String(id);
-    send_message('A', ack_payload);
+    send_message('A', ack_payload.c_str());
 }
