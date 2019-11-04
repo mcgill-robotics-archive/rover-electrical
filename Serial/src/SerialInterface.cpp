@@ -92,6 +92,8 @@ bool SerialInterface::is_priority(Message& message)
         // This will return true if the message is marked as priority
         return priority_ids[message.frameID];
     }
+
+    return false;
 }
 
 void SerialInterface::process_incoming(const byte in_byte)
