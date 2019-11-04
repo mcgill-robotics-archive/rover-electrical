@@ -80,7 +80,7 @@ void SerialInterface::enqueue_message(Message& message)
 
     out_messages.enqueue(message);
 }
-bool SerialInterface::is_priority(Message& message)
+bool SerialInterface::is_priority(const Message& message)
 {
     // If the message is a special type, it is priority 
     if (is_special(message))
@@ -96,7 +96,7 @@ bool SerialInterface::is_priority(Message& message)
     return false;
 }
 
-bool SerialInterface::is_special(Message& message)
+bool SerialInterface::is_special(const Message& message)
 {
     // Special messages are defined only by their frametypes.
     switch (message.frameType)
@@ -296,7 +296,7 @@ void SerialInterface::handle_received_message(Message& message)
     }
 }
 
-bool SerialInterface::validate_message(Message& message)
+bool SerialInterface::validate_message(const Message& message)
 {
     // Special messages are checked first
     if (message.frameType == 'A' && message.checksum == 0xc0)

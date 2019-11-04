@@ -59,14 +59,14 @@ private:
     /**
      * Returns true if the given message is a priority message.
      */
-    bool is_priority(Message& message);
+    bool is_priority(const Message& message);
 
     /**
      * Returns true if the given message is a special message.
      * A special message is a message with special meaning in the protocol.
      * An example of such a message would be the 'ACK' or 'RQ' messages.
      */
-    bool is_special(Message& message);
+    bool is_special(const Message& message);
     
     /**
      * FSM which processes incoming binary data and packages it into Messages.
@@ -93,7 +93,7 @@ private:
      * 2. non-empty
      * @return returns true if a message is valid.
      */
-    bool validate_message(Message& message);
+    bool validate_message(const Message& message);
 
     /**
      * Resets the sliding window to a given id by retransmitting all messages
