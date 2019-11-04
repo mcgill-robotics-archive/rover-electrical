@@ -53,10 +53,11 @@ Message SerialInterface::get_next_message()
 
 void SerialInterface::send_message(uint8_t frameType, const char* payload)
 {
+    String check = (char)frameType + String(payload);
     Message message = { 
         .systemID = system_id, 
         .frameID = next_outgoing_frame_id, 
-        .checksum = crc8ccitt(payload, strlen(payload)),
+        .checksum = crc8ccitt(check.c_str(), check.length()),
         .frameType = frameType, 
         .data = String(payload) }; 
 
@@ -140,14 +141,12 @@ void SerialInterface::handle_received_message(Message& message)
     // If the message is a "RQ" message
     if (message.frameType == 'R')
     {
-        // TODO: this quantity should be stored under message.frameID
-        uint8_t requested_id = message.data.toInt();
+        uint8_t requested_id = message.frameID;
         reset_window(requested_id);
     } 
     else if (message.frameType == 'A')  // If the message is a "ACK" message
     {
-        // TODO: this quantity should be stored under message.frameID.
-        uint8_t acked_id = message.data.toInt();
+        uint8_t acked_id = message.frameID;
         /*
          * Register the id as the last successfully received frame so we know
          * where to reset the sliding window to in the event of a failure.
@@ -249,7 +248,8 @@ bool SerialInterface::validate_message(Message& message)
         return false;
 
     // Check against the checksum
-    if (message.checksum != crc8ccitt(message.data.c_str(), message.data.length()))
+    String check = (char)message.frameType + message.data;
+    if (message.checksum != crc8ccitt(check.c_str(), check.length()))
         return false;
 
     return true;
@@ -257,10 +257,11 @@ bool SerialInterface::validate_message(Message& message)
 
 void SerialInterface::send_priority_message(uint8_t frameType, const char* payload)
 {
+    String check = (char)frameType + String(payload);
     Message message = { 
         .systemID = system_id, 
         .frameID = next_outgoing_frame_id, 
-        .checksum = crc8ccitt(payload, strlen(payload)),
+        .checksum = crc8ccitt(check.c_str(), check.length()),
         .frameType = frameType, 
         .data = String(payload) }; 
 
@@ -284,6 +285,10 @@ void SerialInterface::reset_window(uint8_t id)
 
 void SerialInterface::request_retransmission(uint8_t id)
 {
+    // Construct the message here to skip some extra insructions
+    // WARNING: the checksum is hardcoded here so if we ever change
+    // the scheme, fix this first.
+
     Message rq {
         .systemID = system_id,
         .frameID = id,
@@ -296,6 +301,9 @@ void SerialInterface::request_retransmission(uint8_t id)
 
 void SerialInterface::ack_message(uint8_t id)
 {
+    // Construct the message here to skip some extra insructions
+    // WARNING: the checksum is hardcoded here so if we ever change
+    // the scheme, fix this first.
     Message ack = {
         .systemID = system_id,
         .frameID = id,
