@@ -60,6 +60,13 @@ private:
      * Returns true if the given message is a priority message.
      */
     bool is_priority(Message& message);
+
+    /**
+     * Returns true if the given message is a special message.
+     * A special message is a message with special meaning in the protocol.
+     * An example of such a message would be the 'ACK' or 'RQ' messages.
+     */
+    bool is_special(Message& message);
     
     /**
      * FSM which processes incoming binary data and packages it into Messages.
