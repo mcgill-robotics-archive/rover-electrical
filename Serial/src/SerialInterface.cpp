@@ -227,7 +227,12 @@ void SerialInterface::handle_received_message(Message& message)
 {
     // First check that the message is valid
     if (!validate_message(message))
+    {
+        // If the message is not valid, 
+        // request a retransmission of the expected frame
+        request_retransmission(expected_frame_id);
         return;
+    }
 
     // If the message is a "RQ" message
     if (message.frameType == 'R')
