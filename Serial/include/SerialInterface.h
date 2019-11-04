@@ -3,7 +3,7 @@
 #include "utils/Queue.h"
 #include "utils/crc.h"
 
-#define MAX_QUEUE_SIZE 48
+#define MAX_QUEUE_SIZE 32
 
 // Store message information for processing
 struct Message
@@ -60,14 +60,18 @@ private:
     void process_incoming(const byte in_byte);
 
     /**
-     * Intermediate function which passes a completed message to the correct place.
-     */
-    void handle_received_message(Message& message);
-
-    /**
      * FSM which writes the next byte.
      */
     void process_outgoing();
+
+    /**
+     * Intermediate function which interprets valid messages and acts 
+     * on them depending on their type.
+     * ACK -> registers the last acknowledged message
+     * RQ -> resets the window at the requested id
+     * generic -> queues it as a valid message
+     */
+    void handle_received_message(Message& message);
 
     /**
      * Validates an incoming message by comparing with validity criteria:
@@ -78,7 +82,8 @@ private:
     bool validate_message(Message& message);
 
     /**
-     * Resets the sliding window from a given id and pushes all messages out.
+     * Resets the sliding window to a given id by retransmitting all messages
+     * from the id to the last sent message.
      * @param id the id from which to begin retransmission.
      */
     void reset_window(uint8_t id);
@@ -112,7 +117,7 @@ private:
     uint8_t next_outgoing_frame_id = 0;
 
     /** The expected frame id for the next incoming message. **/
-    uint8_t expected_frame_id = 32; // todo : change this back to 0, set to 31 for testing
+    uint8_t expected_frame_id = 0;
 
     /** The id of the last frame we received an acknowledge for. **/
     uint8_t last_acked_frame = 0;

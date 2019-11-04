@@ -71,6 +71,26 @@ void SerialInterface::send_message(uint8_t frameType, const char* payload)
     out_messages.enqueue(message);
 }
 
+void SerialInterface::send_priority_message(uint8_t frameType, const char* payload)
+{
+    String check = (char)frameType + String(payload);
+    Message message = { 
+        .systemID = system_id, 
+        .frameID = next_outgoing_frame_id, 
+        .checksum = crc8ccitt(check.c_str(), check.length()),
+        .frameType = frameType, 
+        .data = String(payload) }; 
+
+    if (frameType != 'A' && frameType != 'R')
+    {
+        message_cache[next_outgoing_frame_id++] = message;
+
+        next_outgoing_frame_id %= MAX_QUEUE_SIZE;
+    }
+    
+    priority_out_messages.enqueue(message);
+}
+
 void SerialInterface::process_incoming(const byte in_byte)
 {
     static Message message;
@@ -129,47 +149,6 @@ void SerialInterface::process_incoming(const byte in_byte)
                 message.data = message.data + (char)in_byte;
                 break;
             }
-    }
-}
-
-void SerialInterface::handle_received_message(Message& message)
-{
-    // First check that the message is valid
-    if (!validate_message(message))
-        return;
-
-    // If the message is a "RQ" message
-    if (message.frameType == 'R')
-    {
-        uint8_t requested_id = message.frameID;
-        reset_window(requested_id);
-    } 
-    else if (message.frameType == 'A')  // If the message is a "ACK" message
-    {
-        uint8_t acked_id = message.frameID;
-        /*
-         * Register the id as the last successfully received frame so we know
-         * where to reset the sliding window to in the event of a failure.
-         */
-        last_acked_frame = acked_id;
-    }
-    else // Otherwise the message is just generic
-    {
-        // Before anything happens, ensure that the received message
-        // has the expected id. If not, request that the window be reset
-        // at the expected id and do not continue
-        if (message.frameID != expected_frame_id)
-        {
-            request_retransmission(expected_frame_id);
-            return; // do not continue
-        }
-
-        // The message is received in the correct order,
-        // send an ack and add it to the queue
-        ack_message(message.frameID);
-        in_messages.enqueue(message);
-        // Then set the expected frame id. This quantity will wrap around the size of a queue
-        expected_frame_id = (expected_frame_id + 1) % MAX_QUEUE_SIZE; 
     }
 }
 
@@ -241,6 +220,47 @@ void SerialInterface::process_outgoing()
     }
 }
 
+void SerialInterface::handle_received_message(Message& message)
+{
+    // First check that the message is valid
+    if (!validate_message(message))
+        return;
+
+    // If the message is a "RQ" message
+    if (message.frameType == 'R')
+    {
+        uint8_t requested_id = message.frameID;
+        reset_window(requested_id);
+    } 
+    else if (message.frameType == 'A')  // If the message is a "ACK" message
+    {
+        uint8_t acked_id = message.frameID;
+        /*
+         * Register the id as the last successfully received frame so we know
+         * where to reset the sliding window to in the event of a failure.
+         */
+        last_acked_frame = acked_id;
+    }
+    else // Otherwise the message is just generic
+    {
+        // Before anything happens, ensure that the received message
+        // has the expected id. If not, request that the window be reset
+        // at the expected id and do not continue
+        if (message.frameID != expected_frame_id)
+        {
+            request_retransmission(expected_frame_id);
+            return; // do not continue
+        }
+
+        // The message is received in the correct order,
+        // send an ack and add it to the queue
+        ack_message(message.frameID);
+        in_messages.enqueue(message);
+        // Then set the expected frame id. This quantity will wrap around the size of a queue
+        expected_frame_id = (expected_frame_id + 1) % MAX_QUEUE_SIZE; 
+    }
+}
+
 bool SerialInterface::validate_message(Message& message)
 {
     // Special messages are checked first
@@ -260,26 +280,6 @@ bool SerialInterface::validate_message(Message& message)
         return false;
 
     return true;
-}
-
-void SerialInterface::send_priority_message(uint8_t frameType, const char* payload)
-{
-    String check = (char)frameType + String(payload);
-    Message message = { 
-        .systemID = system_id, 
-        .frameID = next_outgoing_frame_id, 
-        .checksum = crc8ccitt(check.c_str(), check.length()),
-        .frameType = frameType, 
-        .data = String(payload) }; 
-
-    if (frameType != 'A' && frameType != 'R')
-    {
-        message_cache[next_outgoing_frame_id++] = message;
-
-        next_outgoing_frame_id %= MAX_QUEUE_SIZE;
-    }
-    
-    priority_out_messages.enqueue(message);
 }
 
 void SerialInterface::reset_window(uint8_t requested_id)
