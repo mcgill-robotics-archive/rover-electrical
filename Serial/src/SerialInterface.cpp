@@ -48,6 +48,8 @@ void SerialInterface::update()
 
 Message SerialInterface::get_next_message()
 {  
+    if (!priority_in_messages.is_empty())
+        return priority_in_messages.dequeue();
     return in_messages.dequeue();
 }
 
@@ -61,34 +63,35 @@ void SerialInterface::send_message(uint8_t frameType, const char* payload)
         .frameType = frameType, 
         .data = String(payload) }; 
 
-    if (frameType != 'R' && frameType != 'A')
-    {
-        message_cache[next_outgoing_frame_id++] = message;
-
-        next_outgoing_frame_id %= MAX_QUEUE_SIZE;
-    }
-    
-    out_messages.enqueue(message);
+    enqueue_message(message);
 }
 
-void SerialInterface::send_priority_message(uint8_t frameType, const char* payload)
+void SerialInterface::enqueue_message(Message& message)
 {
-    String check = (char)frameType + String(payload);
-    Message message = { 
-        .systemID = system_id, 
-        .frameID = next_outgoing_frame_id, 
-        .checksum = crc8ccitt(check.c_str(), check.length()),
-        .frameType = frameType, 
-        .data = String(payload) }; 
-
-    if (frameType != 'A' && frameType != 'R')
+    if (is_priority(message))
     {
-        message_cache[next_outgoing_frame_id++] = message;
-
-        next_outgoing_frame_id %= MAX_QUEUE_SIZE;
+        priority_out_messages.enqueue(message);
+        return;
     }
-    
-    priority_out_messages.enqueue(message);
+
+    // Otherwise the message is just a generic
+    message_cache[next_outgoing_frame_id++] = message;
+    next_outgoing_frame_id %= MAX_QUEUE_SIZE;
+
+    out_messages.enqueue(message);
+}
+bool SerialInterface::is_priority(Message& message)
+{
+    // If the message is a special priority type 
+    if (message.frameType == 'A' || message.frameType == 'R')
+        return true;
+
+    // If we are receiving the message, check it against the list of priority ids
+    if (message.systemID != system_id)
+    {
+        // This will return true if the message is marked as priority
+        return priority_ids[message.frameID];
+    }
 }
 
 void SerialInterface::process_incoming(const byte in_byte)
@@ -229,17 +232,15 @@ void SerialInterface::handle_received_message(Message& message)
     // If the message is a "RQ" message
     if (message.frameType == 'R')
     {
-        uint8_t requested_id = message.frameID;
-        reset_window(requested_id);
+        reset_window(message.frameID);
     } 
     else if (message.frameType == 'A')  // If the message is a "ACK" message
     {
-        uint8_t acked_id = message.frameID;
         /*
          * Register the id as the last successfully received frame so we know
          * where to reset the sliding window to in the event of a failure.
          */
-        last_acked_frame = acked_id;
+        last_acked_frame = message.frameID;
     }
     else // Otherwise the message is just generic
     {
@@ -253,9 +254,22 @@ void SerialInterface::handle_received_message(Message& message)
         }
 
         // The message is received in the correct order,
-        // send an ack and add it to the queue
+        // send an ack
         ack_message(message.frameID);
-        in_messages.enqueue(message);
+
+        // Check if the message is marked as priority
+        if (is_priority(message))
+        {
+            // queue it as priority
+            priority_in_messages.enqueue(message);
+            // mark the id as not priority anymore
+            priority_ids[message.frameID] = false;
+        }
+        else
+        {
+            // otherwise it's just a regular message
+            in_messages.enqueue(message);
+        }
         // Then set the expected frame id. This quantity will wrap around the size of a queue
         expected_frame_id = (expected_frame_id + 1) % MAX_QUEUE_SIZE; 
     }
@@ -305,7 +319,8 @@ void SerialInterface::request_retransmission(uint8_t id)
         .frameType = 'R',
         .data = String("") };
     
-    priority_out_messages.enqueue(rq);
+    priority_ids[id] = true;
+    enqueue_message(rq);
 }
 
 void SerialInterface::ack_message(uint8_t id)
@@ -320,5 +335,5 @@ void SerialInterface::ack_message(uint8_t id)
         .frameType = 'A',
         .data = String("") };
 
-    priority_out_messages.enqueue(ack);
+    enqueue_message(ack);
 }

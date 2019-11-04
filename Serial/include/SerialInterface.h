@@ -41,19 +41,26 @@ public:
     Message get_next_message();
 
     /**
-     * Send a message over the serial connection.
+     * Construct and enqueue a message.
      * @param frameType Indicates which type of frame this message is.
      * @param payload Message payload
      */
     void send_message(uint8_t frameType, const char* payload);
 
-    /**
-     * Sends a message over the serial connection _immediately_.
-     * @see send_message
-     */
-    void send_priority_message(uint8_t frameType, const char* payload);
-
 private:
+    /**
+     * Enqueue a message in it's respective queue.
+     * If the message is a special type, push it to priority queue
+     * otherwise push it to regular queue.
+     * @param message the message to send
+     */
+    void enqueue_message(Message& message);
+
+    /**
+     * Returns true if the given message is a priority message.
+     */
+    bool is_priority(Message& message);
+    
     /**
      * FSM which processes incoming binary data and packages it into Messages.
      */
