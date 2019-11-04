@@ -3,7 +3,7 @@
 #include "utils/Queue.h"
 #include "utils/crc.h"
 
-#define MAX_QUEUE_SIZE 32
+#define MAX_QUEUE_SIZE 48
 
 // Store message information for processing
 struct Message

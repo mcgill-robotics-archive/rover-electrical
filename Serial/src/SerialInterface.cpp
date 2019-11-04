@@ -169,7 +169,7 @@ void SerialInterface::handle_received_message(Message& message)
         ack_message(message.frameID);
         in_messages.enqueue(message);
         // Then set the expected frame id. This quantity will wrap around the size of a queue
-        expected_frame_id = (expected_frame_id + 1); //% MAX_QUEUE_SIZE;
+        expected_frame_id = (expected_frame_id + 1) % MAX_QUEUE_SIZE; 
     }
 }
 
@@ -275,12 +275,14 @@ void SerialInterface::send_priority_message(uint8_t frameType, const char* paylo
     priority_out_messages.enqueue(message);
 }
 
-void SerialInterface::reset_window(uint8_t id)
+void SerialInterface::reset_window(uint8_t requested_id)
 {
-    // Send out all missed messages again
-    // TODO: implement sending _all_ missed messages and not just the start of missed block
-    priority_out_messages.enqueue(message_cache[id]);
-
+    // Retransmit all messages since the requested id
+    while (requested_id != next_outgoing_frame_id)
+    {
+        priority_out_messages.enqueue(message_cache[requested_id]);
+        requested_id = (requested_id + 1) % MAX_QUEUE_SIZE;
+    }
 }
 
 void SerialInterface::request_retransmission(uint8_t id)
