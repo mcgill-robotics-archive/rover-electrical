@@ -243,6 +243,13 @@ void SerialInterface::process_outgoing()
 
 bool SerialInterface::validate_message(Message& message)
 {
+    // Special messages are checked first
+    if (message.frameType == 'A' && message.checksum == 0xc0)
+        return true;
+    if (message.frameType == 'R' && message.checksum == 0xb9)
+        return true;
+
+
     // An empty message is invalid
     if (message.data.equals(""))
         return false;
