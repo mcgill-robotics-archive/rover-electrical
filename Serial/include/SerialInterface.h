@@ -125,7 +125,7 @@ private:
     uint8_t next_outgoing_frame_id = 0;
 
     /** The expected frame id for the next incoming message. **/
-    uint8_t expected_frame_id = 0;
+    uint8_t expected_frame_id = 32; // todo : change this back to 0, set to 31 for testing
 
     /** The id of the last frame we received an acknowledge for. **/
     uint8_t last_acked_frame = 0;
