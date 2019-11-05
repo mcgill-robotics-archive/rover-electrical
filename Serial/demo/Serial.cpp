@@ -2,11 +2,12 @@
 #include "SerialInterface.h"
 #include "utils/crc.h"
 
-SerialInterface serial;
+SerialInterface serial = SerialInterface(9600, 'D');
 
 void setup() 
 {
-    serial.begin(9600);
+    serial.begin();
+    pinMode(2, INPUT);
 }
 
 void loop() 
@@ -17,19 +18,6 @@ void loop()
 
     if (!message.data.equals(""))
     {
-        Serial.print("SID: ");
-        Serial.write(message.systemID);
-        Serial.print(" FID: ");
-        Serial.write(message.frameID);
-        Serial.print(" CHK: ");
-        Serial.write(message.checksum);
-        Serial.print(" FT: ");
-        Serial.write(message.frameType);
-        Serial.println(" DATA: " + message.data);
-    }
-
-    if (!message.data.equals(""))
-    {
-        serial.send_message('1', "hello");
+        serial.send_message('0', "0");
     }
 }
