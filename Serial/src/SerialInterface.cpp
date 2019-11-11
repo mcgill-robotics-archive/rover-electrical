@@ -55,6 +55,9 @@ Message SerialInterface::get_next_message()
 
 void SerialInterface::send_message(uint8_t frameType, const char* payload)
 {
+    // Prevent sending messages while not in the established state
+    if (state != ESTABLISHED) return;
+
     String check = (char)frameType + String(payload);
     Message message = { 
         .systemID = system_id, 
@@ -80,6 +83,7 @@ void SerialInterface::enqueue_message(Message& message)
 
     out_messages.enqueue(message);
 }
+
 bool SerialInterface::is_priority(const Message& message)
 {
     // If the message is a control type, it is priority 
@@ -101,8 +105,10 @@ bool SerialInterface::is_control(const Message& message)
     // control messages are defined only by their frametypes.
     switch (message.frameType)
     {
-        case 'A': return true;
-        case 'R': return true;
+        case 'A': return true;  // ack
+        case 'R': return true;  // rq
+        case 'S': return true;  // syn
+        case 'Y': return true;  // syn/ack
         default : return false;
     }
 }
@@ -250,6 +256,36 @@ void SerialInterface::handle_received_message(Message& message)
         return;
     }
 
+    // If a synchronize attempt is made, acknowledge it
+    if (message.frameType == 'S' && state == WAITING)
+    {
+        syn_ack((message.frameID + 1) % MAX_QUEUE_SIZE);
+        // As per specs, the ack should be set to the same id as syn/ack
+        expected_frame_id = (message.frameID + 1) % MAX_QUEUE_SIZE; 
+        state = SYN_RECEIVED;
+        return;
+    }
+
+    if (state == SYN_RECEIVED && message.frameType == 'A')
+    {
+        if (message.frameID == expected_frame_id)
+        {
+            // Synchronize everything to 0:
+            expected_frame_id = 0;
+            last_acked_frame = 0;
+            next_outgoing_frame_id = 0;
+            // Connection is now established
+            state = ESTABLISHED;
+        }
+        // TODO: What should happen if an ack isn't ever received after a syn/ack?
+        return;
+    }
+
+    // Before getting to processing regular messages, 
+    // ensure we are in the established state
+    if (state != ESTABLISHED)
+        return;
+
     // If the message is a "RQ" message
     if (message.frameType == 'R')
     {
@@ -302,6 +338,8 @@ bool SerialInterface::validate_message(const Message& message)
     if (message.frameType == 'A' && message.checksum == 0xc0)
         return true;
     if (message.frameType == 'R' && message.checksum == 0xb9)
+        return true;
+    if (message.frameType == 'S' && message.checksum == 0xbe)
         return true;
 
 
@@ -357,4 +395,16 @@ void SerialInterface::ack_message(uint8_t id)
         .data = String("") };
 
     enqueue_message(ack);
+}
+
+void SerialInterface::syn_ack(uint8_t id)
+{
+    Message syn_ack = {
+        .systemID = system_id,
+        .frameID = id,
+        .checksum = 0x88, // precomputed checksum for 'Y'
+        .frameType = 'Y',
+        .data = String("") };
+
+    enqueue_message(syn_ack);
 }

@@ -15,6 +15,14 @@ struct Message
     String data;
 };
 
+// Describes the state of the serial connection
+enum SerialStates
+{
+    WAITING,
+    SYN_RECEIVED,
+    ESTABLISHED
+};
+
 /**
  * Serial Interface to establish connection and communicate with
  * devices using the McGill Robotics Rover Serial Frame standard
@@ -113,6 +121,12 @@ private:
      */
     void ack_message(uint8_t id);
 
+    /**
+     * Send out a syn/ack for a corresponding syn request.
+     * @param syn_id the syn-id is required as it is used to verify correct synchronization
+     */
+    void syn_ack(uint8_t id);
+
     /** This queue stores all the incoming messages which have not yet been processed. **/
     Queue<Message> in_messages;
     /** This queue stores all the incoming _priority_ messages that have not yet been processed. **/
@@ -138,4 +152,7 @@ private:
     /* Connection params */
     const int baudrate;
     const uint8_t system_id;
+    
+    /** Stores the state of the serial connection. **/
+    SerialStates state = WAITING;   // waiting for connection by default
 };
