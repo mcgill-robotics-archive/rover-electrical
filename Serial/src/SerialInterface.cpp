@@ -14,9 +14,10 @@ enum SerialWriteStates
     SW_WRITING_PAYLOAD
 };
 
-SerialInterface::SerialInterface(int _baudrate, uint8_t sys_id) :
+SerialInterface::SerialInterface(int _baudrate, uint8_t sys_id, uint64_t timeout) :
     baudrate(_baudrate),
-    system_id(sys_id)
+    system_id(sys_id),
+    timeout(timeout)
 {
     // initialize the array to false
     for (uint8_t i = 0; i < MAX_QUEUE_SIZE; i++)
@@ -32,6 +33,9 @@ void SerialInterface::begin()
 
 void SerialInterface::update()
 {
+    // last time update was called. Used to compute delta_times
+    static uint64_t last_time = 0;
+
     // While the input buffer has at least 1 byte, read and process
     while (Serial.available() > 0)
     {
@@ -43,6 +47,18 @@ void SerialInterface::update()
     {
         process_outgoing();
         Serial.flush();
+    }
+
+    if (state == SYN_RECEIVED || state == FIN_RECEIVED)
+    {
+        timer += millis() - last_time;
+        last_time = millis();
+
+        if (timer > timeout)
+        {
+            resync_state();
+            state = WAITING;
+        }
     }
 }
 
@@ -273,12 +289,9 @@ void SerialInterface::handle_received_message(Message& message)
         if (message.frameID == expected_frame_id)
         {
             // Synchronize everything to 0:
-            expected_frame_id = 0;
-            last_acked_frame = 0;
-            next_outgoing_frame_id = 0;
+            resync_state();
             // Connection is now established
             state = ESTABLISHED;
-            return;
         }
         return;
     }
@@ -295,9 +308,7 @@ void SerialInterface::handle_received_message(Message& message)
     {
         // Connection was terminated gracefully,
         // reset everything and wait for a new synchronization request
-        next_outgoing_frame_id = 0;
-        expected_frame_id = 0;
-        last_acked_frame = 0;
+        resync_state();
         state = WAITING;
     }
 
@@ -443,4 +454,18 @@ void SerialInterface::fin_ack(uint8_t id)
         .data = String("") };
 
     enqueue_message(fin_ack);
+}
+
+void SerialInterface::resync_state()
+{
+    next_outgoing_frame_id = 0;
+    expected_frame_id = 0;
+    last_acked_frame = 0;
+
+    timer = 0;
+    
+    for (uint8_t i = 0; i < MAX_QUEUE_SIZE; ++i)
+    {
+        priority_ids[i] = false;
+    }
 }

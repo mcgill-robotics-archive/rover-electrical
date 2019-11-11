@@ -31,7 +31,7 @@ enum SerialStates
 class SerialInterface
 {
 public:
-    SerialInterface(int _baudrate, uint8_t _sys_id);
+    SerialInterface(int _baudrate, uint8_t _sys_id, uint64_t timeout);
     /**
      * Initialize the serial connection.
      */
@@ -134,6 +134,11 @@ private:
      */
     void fin_ack(uint8_t id);
 
+    /**
+     * Resets all state information to default state. Called on sync
+     */
+    void resync_state();
+
     /** This queue stores all the incoming messages which have not yet been processed. **/
     Queue<Message> in_messages;
     /** This queue stores all the incoming _priority_ messages that have not yet been processed. **/
@@ -162,4 +167,10 @@ private:
     
     /** Stores the state of the serial connection. **/
     SerialStates state = WAITING;   // waiting for connection by default
+
+    /** Keeps track of how long it has been since the last ack came in. **/
+    uint64_t timer;
+
+    /** How long the connection should wait for an ack before terminating. **/
+    uint64_t timeout;
 };
