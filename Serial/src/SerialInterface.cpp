@@ -109,6 +109,8 @@ bool SerialInterface::is_control(const Message& message)
         case 'R': return true;  // rq
         case 'S': return true;  // syn
         case 'Y': return true;  // syn/ack
+        case 'F': return true;  // fin
+        case 'Q': return true;  // fin/ack
         default : return false;
     }
 }
@@ -276,9 +278,27 @@ void SerialInterface::handle_received_message(Message& message)
             next_outgoing_frame_id = 0;
             // Connection is now established
             state = ESTABLISHED;
+            return;
         }
-        // TODO: What should happen if an ack isn't ever received after a syn/ack?
         return;
+    }
+
+    if (message.frameType == 'F' && state == ESTABLISHED)
+    {
+        uint8_t frameid = (message.frameID + 1) % MAX_QUEUE_SIZE;
+        fin_ack(frameid);
+        state = FIN_RECEIVED;
+        return;
+    }
+
+    if (state == FIN_RECEIVED && message.frameType == 'A')
+    {
+        // Connection was terminated gracefully,
+        // reset everything and wait for a new synchronization request
+        next_outgoing_frame_id = 0;
+        expected_frame_id = 0;
+        last_acked_frame = 0;
+        state = WAITING;
     }
 
     // Before getting to processing regular messages, 
@@ -340,6 +360,10 @@ bool SerialInterface::validate_message(const Message& message)
     if (message.frameType == 'R' && message.checksum == 0xb9)
         return true;
     if (message.frameType == 'S' && message.checksum == 0xbe)
+        return true;
+    if (message.frameType == 'F' && message.checksum == 0xd5)
+        return true;
+    if (message.frameType == 'Q' && message.checksum == 0xb0)
         return true;
 
 
@@ -407,4 +431,16 @@ void SerialInterface::syn_ack(uint8_t id)
         .data = String("") };
 
     enqueue_message(syn_ack);
+}
+
+void SerialInterface::fin_ack(uint8_t id)
+{
+    Message fin_ack = {
+        .systemID = system_id,
+        .frameID = id,
+        .checksum = 0xb0, // precomputed checksum for 'Q'
+        .frameType = 'Q',
+        .data = String("") };
+
+    enqueue_message(fin_ack);
 }

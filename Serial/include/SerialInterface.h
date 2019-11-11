@@ -20,7 +20,8 @@ enum SerialStates
 {
     WAITING,
     SYN_RECEIVED,
-    ESTABLISHED
+    ESTABLISHED,
+    FIN_RECEIVED
 };
 
 /**
@@ -123,9 +124,15 @@ private:
 
     /**
      * Send out a syn/ack for a corresponding syn request.
-     * @param syn_id the syn-id is required as it is used to verify correct synchronization
+     * @param id the id must be set to 1 more than the received syn's id.
      */
     void syn_ack(uint8_t id);
+
+    /**
+     * Send out a fin/ack for a corresponding fin request.
+     * @param id the id must be set to 1 more than the received fin's id.
+     */
+    void fin_ack(uint8_t id);
 
     /** This queue stores all the incoming messages which have not yet been processed. **/
     Queue<Message> in_messages;
