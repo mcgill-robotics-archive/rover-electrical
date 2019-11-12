@@ -341,6 +341,10 @@ void SerialInterface::handle_received_message(Message& message)
             request_retransmission(expected_frame_id);
             return; // do not continue
         }
+        
+        // If we are waiting for a requested message and it comes in
+        if (waiting_request && message.frameID == requested_frame_id)
+            waiting_request = false;
 
         // The message is received in the correct order,
         // send an ack
@@ -353,12 +357,6 @@ void SerialInterface::handle_received_message(Message& message)
             priority_in_messages.enqueue(message);
             // mark the id as not priority anymore
             priority_ids[message.frameID] = false;
-
-            // since this message is a priority, and the only way
-            // for a message to be priority is because it was requested,
-            // this must be the message that flagged the 'waiting_request'
-            // and now we have it so reset that
-            waiting_request = false;
         }
         else
         {
@@ -414,7 +412,7 @@ void SerialInterface::request_retransmission(uint8_t id)
     // the scheme, fix this first.
 
     // Don't send another request if this frame was already requested recently
-    if (waiting_request == true && requested_frame_id == id)
+    if (waiting_request)
         return;
 
     requested_frame_id = id;
