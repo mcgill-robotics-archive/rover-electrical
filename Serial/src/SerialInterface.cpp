@@ -34,7 +34,7 @@ void SerialInterface::begin()
 void SerialInterface::update()
 {
     // last time update was called. Used to compute delta_times
-    static uint64_t last_time = 0;
+    static unsigned long last_time = 0;
 
     // While the input buffer has at least 1 byte, read and process
     while (Serial.available() > 0)
@@ -49,12 +49,12 @@ void SerialInterface::update()
         Serial.flush();
     }
 
-    if (state == SYN_RECEIVED || state == FIN_RECEIVED)
+    if (state != WAITING)
     {
-        timer += millis() - last_time;
+        ack_timer += millis() - last_time;
         last_time = millis();
 
-        if (timer > timeout)
+        if (ack_timer > timeout)
         {
             resync_state();
             state = WAITING;
@@ -329,6 +329,7 @@ void SerialInterface::handle_received_message(Message& message)
          * where to reset the sliding window to in the event of a failure.
          */
         last_acked_frame = message.frameID;
+        ack_timer = 0;
     }
     else // Otherwise the message is just generic
     {
@@ -462,7 +463,7 @@ void SerialInterface::resync_state()
     expected_frame_id = 0;
     last_acked_frame = 0;
 
-    timer = 0;
+    ack_timer = 0;
     
     for (uint8_t i = 0; i < MAX_QUEUE_SIZE; ++i)
     {

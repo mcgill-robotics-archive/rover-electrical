@@ -169,8 +169,8 @@ private:
     SerialStates state = WAITING;   // waiting for connection by default
 
     /** Keeps track of how long it has been since the last ack came in. **/
-    uint64_t timer;
+    unsigned long ack_timer;
 
     /** How long the connection should wait for an ack before terminating. **/
-    uint64_t timeout;
+    unsigned long timeout;
 };
