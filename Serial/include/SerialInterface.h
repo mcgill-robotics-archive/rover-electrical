@@ -161,6 +161,10 @@ private:
     /** The id of the last frame we received an acknowledge for. **/
     uint8_t last_acked_frame = 0;
 
+    /** Is the device currently waiting to receive a requested frame? **/
+    bool waiting_request = false;
+    uint8_t requested_frame_id;
+
     /* Connection params */
     const int baudrate;
     const uint8_t system_id;

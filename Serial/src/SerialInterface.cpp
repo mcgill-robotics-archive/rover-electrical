@@ -353,6 +353,12 @@ void SerialInterface::handle_received_message(Message& message)
             priority_in_messages.enqueue(message);
             // mark the id as not priority anymore
             priority_ids[message.frameID] = false;
+
+            // since this message is a priority, and the only way
+            // for a message to be priority is because it was requested,
+            // this must be the message that flagged the 'waiting_request'
+            // and now we have it so reset that
+            waiting_request = false;
         }
         else
         {
@@ -406,6 +412,13 @@ void SerialInterface::request_retransmission(uint8_t id)
     // Construct the message here to skip some extra insructions
     // WARNING: the checksum is hardcoded here so if we ever change
     // the scheme, fix this first.
+
+    // Don't send another request if this frame was already requested recently
+    if (waiting_request == true && requested_frame_id == id)
+        return;
+
+    requested_frame_id = id;
+    waiting_request = true;
 
     Message rq {
         .systemID = system_id,
