@@ -124,9 +124,10 @@ private:
 
     /**
      * Send out a syn/ack for a corresponding syn request.
-     * @param id the id must be set to 1 more than the received syn's id.
+     * @param id the id of the syn_ack frame is set to the same id as the corresponding syn.
+     * @param next_id the next frame id this device is expected to send.
      */
-    void syn_ack(uint8_t id);
+    void syn_ack(uint8_t id, uint8_t next_id);
 
     /**
      * Send out a fin/ack for a corresponding fin request.
