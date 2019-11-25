@@ -54,11 +54,10 @@ void SerialInterface::update()
         ack_timer += millis() - last_time;
         last_time = millis();
 
+        // If the last acked message was more than _timeout_ seconds ago, drop connection
         if (ack_timer > timeout)
         {
-            ack_timer = 0;
-            waiting_request = 0;
-            state = WAITING;
+            reset_state();
         }
     }
 }
@@ -310,7 +309,7 @@ void SerialInterface::handle_received_message(Message& message)
     {
         // Connection was terminated gracefully,
         // reset everything and wait for a new synchronization request
-        resync_state();
+        reset_state();
         state = WAITING;
     }
 
@@ -471,14 +470,17 @@ void SerialInterface::fin_ack(uint8_t id)
     enqueue_message(fin_ack);
 }
 
-void SerialInterface::resync_state()
+void SerialInterface::reset_state()
 {
-    next_outgoing_frame_id = 0;
-    expected_frame_id = 0;
-    last_acked_frame = 0;
-
     ack_timer = 0;
-    
+    waiting_request = 0;
+
+    // The connection was dropped so we should clear up some unnecessary memory.
+    out_messages.clear();
+    priority_out_messages.clear();
+
+    state = WAITING;
+
     for (uint8_t i = 0; i < MAX_QUEUE_SIZE; ++i)
     {
         priority_ids[i] = false;

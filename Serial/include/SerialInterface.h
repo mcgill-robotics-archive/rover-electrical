@@ -138,7 +138,7 @@ private:
     /**
      * Resets all state information to default state. Called on sync
      */
-    void resync_state();
+    void reset_state();
 
     /** This queue stores all the incoming messages which have not yet been processed. **/
     Queue<Message> in_messages;
