@@ -60,6 +60,14 @@ public:
         return false;
     }
 
+    void clear()
+    {
+        while (!is_empty())
+        {
+            dequeue();
+        }
+    }
+
 private:
     QueueNode* front;
     QueueNode* back;
