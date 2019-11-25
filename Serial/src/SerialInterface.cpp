@@ -56,7 +56,6 @@ void SerialInterface::update()
 
         if (ack_timer > timeout)
         {
-            Serial.println("Connection timed out");
             ack_timer = 0;
             waiting_request = 0;
             state = WAITING;
@@ -279,7 +278,6 @@ void SerialInterface::handle_received_message(Message& message)
     // If a synchronize attempt is made, acknowledge it
     if (state == WAITING && message.frameType == 'S') 
     {
-        Serial.println("Syn");
         syn_ack(message.frameID, next_outgoing_frame_id);
 
         expected_frame_id = message.frameID; 
@@ -290,16 +288,11 @@ void SerialInterface::handle_received_message(Message& message)
 
     if (state == SYN_RECEIVED && message.frameType == 'A')
     {
-        Serial.println("Ack (connection)");
         if (message.frameID == next_outgoing_frame_id)
         {
             // Connection is now established
             state = ESTABLISHED;
             ack_timer = 0;
-        }
-        else
-        {
-            Serial.println("Ack (connection) INVALID");
         }
         
         return;
@@ -333,7 +326,6 @@ void SerialInterface::handle_received_message(Message& message)
     } 
     else if (message.frameType == 'A')  // If the message is a "ACK" message
     {
-        Serial.println("Acknowledge");
         /*
          * Register the id as the last successfully received frame so we know
          * where to reset the sliding window to in the event of a failure.
@@ -343,7 +335,6 @@ void SerialInterface::handle_received_message(Message& message)
     }
     else // Otherwise the message is just generic
     {
-        Serial.println("Generic message");
         // Before anything happens, ensure that the received message
         // has the expected id. If not, request that the window be reset
         // at the expected id and do not continue
