@@ -14,9 +14,10 @@ enum SerialWriteStates
     SW_WRITING_PAYLOAD
 };
 
-SerialInterface::SerialInterface(int _baudrate, uint8_t sys_id) :
+SerialInterface::SerialInterface(int _baudrate, uint8_t sys_id, uint64_t timeout) :
     baudrate(_baudrate),
-    system_id(sys_id)
+    system_id(sys_id),
+    timeout(timeout)
 {
     // initialize the array to false
     for (uint8_t i = 0; i < MAX_QUEUE_SIZE; i++)
@@ -32,6 +33,9 @@ void SerialInterface::begin()
 
 void SerialInterface::update()
 {
+    // last time update was called. Used to compute delta_times
+    static unsigned long last_time = 0;
+
     // While the input buffer has at least 1 byte, read and process
     while (Serial.available() > 0)
     {
@@ -44,6 +48,19 @@ void SerialInterface::update()
         process_outgoing();
         Serial.flush();
     }
+
+    if (state != WAITING)
+    {
+        ack_timer += millis() - last_time;
+        last_time = millis();
+
+        if (ack_timer > timeout)
+        {
+            ack_timer = 0;
+            waiting_request = 0;
+            state = WAITING;
+        }
+    }
 }
 
 Message SerialInterface::get_next_message()
@@ -55,6 +72,9 @@ Message SerialInterface::get_next_message()
 
 void SerialInterface::send_message(uint8_t frameType, const char* payload)
 {
+    // Prevent sending messages while not in the established state
+    if (state != ESTABLISHED) return;
+
     String check = (char)frameType + String(payload);
     Message message = { 
         .systemID = system_id, 
@@ -80,6 +100,7 @@ void SerialInterface::enqueue_message(Message& message)
 
     out_messages.enqueue(message);
 }
+
 bool SerialInterface::is_priority(const Message& message)
 {
     // If the message is a control type, it is priority 
@@ -101,8 +122,12 @@ bool SerialInterface::is_control(const Message& message)
     // control messages are defined only by their frametypes.
     switch (message.frameType)
     {
-        case 'A': return true;
-        case 'R': return true;
+        case 'A': return true;  // ack
+        case 'R': return true;  // rq
+        case 'S': return true;  // syn
+        case 'Y': return true;  // syn/ack
+        case 'F': return true;  // fin
+        case 'Q': return true;  // fin/ack
         default : return false;
     }
 }
@@ -245,10 +270,54 @@ void SerialInterface::handle_received_message(Message& message)
         // request a retransmission of the expected frame
         
         // Don't attempt to recover control messages
-        if (!is_control(message))
+        if (!is_control(message) && state == ESTABLISHED)
             request_retransmission(expected_frame_id);
         return;
     }
+
+    // If a synchronize attempt is made, acknowledge it
+    if (state == WAITING && message.frameType == 'S') 
+    {
+        syn_ack(message.frameID, next_outgoing_frame_id);
+
+        expected_frame_id = message.frameID; 
+        state = SYN_RECEIVED;
+        ack_timer = 0;
+        return;
+    }
+
+    if (state == SYN_RECEIVED && message.frameType == 'A')
+    {
+        if (message.frameID == next_outgoing_frame_id)
+        {
+            // Connection is now established
+            state = ESTABLISHED;
+            ack_timer = 0;
+        }
+        
+        return;
+    }
+
+    if (message.frameType == 'F' && state == ESTABLISHED)
+    {
+        uint8_t frameid = (message.frameID + 1) % MAX_QUEUE_SIZE;
+        fin_ack(frameid);
+        state = FIN_RECEIVED;
+        return;
+    }
+
+    if (state == FIN_RECEIVED && message.frameType == 'A')
+    {
+        // Connection was terminated gracefully,
+        // reset everything and wait for a new synchronization request
+        resync_state();
+        state = WAITING;
+    }
+
+    // Before getting to processing regular messages, 
+    // ensure we are in the established state
+    if (state != ESTABLISHED)
+        return;
 
     // If the message is a "RQ" message
     if (message.frameType == 'R')
@@ -262,6 +331,7 @@ void SerialInterface::handle_received_message(Message& message)
          * where to reset the sliding window to in the event of a failure.
          */
         last_acked_frame = message.frameID;
+        ack_timer = 0;
     }
     else // Otherwise the message is just generic
     {
@@ -273,6 +343,10 @@ void SerialInterface::handle_received_message(Message& message)
             request_retransmission(expected_frame_id);
             return; // do not continue
         }
+        
+        // If we are waiting for a requested message and it comes in
+        if (waiting_request && message.frameID == requested_frame_id)
+            waiting_request = false;
 
         // The message is received in the correct order,
         // send an ack
@@ -302,6 +376,12 @@ bool SerialInterface::validate_message(const Message& message)
     if (message.frameType == 'A' && message.checksum == 0xc0)
         return true;
     if (message.frameType == 'R' && message.checksum == 0xb9)
+        return true;
+    if (message.frameType == 'S' && message.checksum == 0xbe)
+        return true;
+    if (message.frameType == 'F' && message.checksum == 0xd5)
+        return true;
+    if (message.frameType == 'Q' && message.checksum == 0xb0)
         return true;
 
 
@@ -333,6 +413,13 @@ void SerialInterface::request_retransmission(uint8_t id)
     // WARNING: the checksum is hardcoded here so if we ever change
     // the scheme, fix this first.
 
+    // Don't send another request if this frame was already requested recently
+    if (waiting_request)
+        return;
+
+    requested_frame_id = id;
+    waiting_request = true;
+
     Message rq {
         .systemID = system_id,
         .frameID = id,
@@ -357,4 +444,43 @@ void SerialInterface::ack_message(uint8_t id)
         .data = String("") };
 
     enqueue_message(ack);
+}
+
+void SerialInterface::syn_ack(uint8_t id, uint8_t next_id)
+{
+    String to_check = String('Y') + String(next_id);
+    Message syn_ack = {
+        .systemID = system_id,
+        .frameID = id,
+        .checksum = crc8ccitt(to_check.c_str(), to_check.length()),
+        .frameType = 'Y',
+        .data = String(next_id) };
+
+    enqueue_message(syn_ack);
+}
+
+void SerialInterface::fin_ack(uint8_t id)
+{
+    Message fin_ack = {
+        .systemID = system_id,
+        .frameID = id,
+        .checksum = 0xb0, // precomputed checksum for 'Q'
+        .frameType = 'Q',
+        .data = String("") };
+
+    enqueue_message(fin_ack);
+}
+
+void SerialInterface::resync_state()
+{
+    next_outgoing_frame_id = 0;
+    expected_frame_id = 0;
+    last_acked_frame = 0;
+
+    ack_timer = 0;
+    
+    for (uint8_t i = 0; i < MAX_QUEUE_SIZE; ++i)
+    {
+        priority_ids[i] = false;
+    }
 }

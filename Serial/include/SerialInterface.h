@@ -15,6 +15,15 @@ struct Message
     String data;
 };
 
+// Describes the state of the serial connection
+enum SerialStates
+{
+    WAITING,
+    SYN_RECEIVED,
+    ESTABLISHED,
+    FIN_RECEIVED
+};
+
 /**
  * Serial Interface to establish connection and communicate with
  * devices using the McGill Robotics Rover Serial Frame standard
@@ -22,7 +31,7 @@ struct Message
 class SerialInterface
 {
 public:
-    SerialInterface(int _baudrate, uint8_t _sys_id);
+    SerialInterface(int _baudrate, uint8_t _sys_id, uint64_t timeout);
     /**
      * Initialize the serial connection.
      */
@@ -113,6 +122,24 @@ private:
      */
     void ack_message(uint8_t id);
 
+    /**
+     * Send out a syn/ack for a corresponding syn request.
+     * @param id the id of the syn_ack frame is set to the same id as the corresponding syn.
+     * @param next_id the next frame id this device is expected to send.
+     */
+    void syn_ack(uint8_t id, uint8_t next_id);
+
+    /**
+     * Send out a fin/ack for a corresponding fin request.
+     * @param id the id must be set to 1 more than the received fin's id.
+     */
+    void fin_ack(uint8_t id);
+
+    /**
+     * Resets all state information to default state. Called on sync
+     */
+    void resync_state();
+
     /** This queue stores all the incoming messages which have not yet been processed. **/
     Queue<Message> in_messages;
     /** This queue stores all the incoming _priority_ messages that have not yet been processed. **/
@@ -135,7 +162,20 @@ private:
     /** The id of the last frame we received an acknowledge for. **/
     uint8_t last_acked_frame = 0;
 
+    /** Is the device currently waiting to receive a requested frame? **/
+    bool waiting_request = false;
+    uint8_t requested_frame_id;
+
     /* Connection params */
     const int baudrate;
     const uint8_t system_id;
+    
+    /** Stores the state of the serial connection. **/
+    SerialStates state = WAITING;   // waiting for connection by default
+
+    /** Keeps track of how long it has been since the last ack came in. **/
+    unsigned long ack_timer;
+
+    /** How long the connection should wait for an ack before terminating. **/
+    unsigned long timeout;
 };
