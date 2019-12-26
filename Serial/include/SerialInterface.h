@@ -43,6 +43,11 @@ public:
     void update();
 
     /**
+     * FSM which processes incoming binary data and packages it into Messages.
+     */
+    void process_incoming(const byte in_byte);
+
+    /**
      * Get the next message in the queue. If there are any
      * priority messages, pop from that queue before regular messages.
      * @return the next message in the queue
@@ -76,11 +81,6 @@ private:
      */
     bool is_control(const Message& message);
     
-    /**
-     * FSM which processes incoming binary data and packages it into Messages.
-     */
-    void process_incoming(const byte in_byte);
-
     /**
      * FSM which writes the next byte.
      */
@@ -138,7 +138,7 @@ private:
     /**
      * Resets all state information to default state. Called on sync
      */
-    void resync_state();
+    void reset_state();
 
     /** This queue stores all the incoming messages which have not yet been processed. **/
     Queue<Message> in_messages;
