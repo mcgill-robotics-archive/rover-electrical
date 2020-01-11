@@ -2,6 +2,9 @@
 #include <cassert>
 #include <stdio.h>
 
+#include <cerrno>
+#include <iostream>
+
 void test_int()
 {
 	Message m;
@@ -38,6 +41,10 @@ void test_invalid()
 	assert(v.type == Variant::TYPE_INVALID);
 
 	m = Message();
+	v = parse_message(m, 'R');
+	assert(v.type == Variant::TYPE_INVALID);
+
+	m.data = "R300X12.3 Y456";
 	v = parse_message(m, 'R');
 	assert(v.type == Variant::TYPE_INVALID);
 	printf("Invalid passed\n");
