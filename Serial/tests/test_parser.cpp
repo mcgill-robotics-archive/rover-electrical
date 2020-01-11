@@ -36,6 +36,10 @@ void test_invalid()
 	m.data = "R300 X21.10 Y0.122";
 	Variant v = parse_message(m, 'Z');
 	assert(v.type == Variant::TYPE_INVALID);
+
+	m = Message();
+	v = parse_message(m, 'R');
+	assert(v.type == Variant::TYPE_INVALID);
 	printf("Invalid passed\n");
 }
 
