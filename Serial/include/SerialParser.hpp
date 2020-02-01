@@ -22,6 +22,14 @@ struct Variant
 	~Variant() {}
 };
 
+static bool is_number(char a)
+{
+	if (a >= '0' && a <= '9')
+		return true;
+	else
+		return false;
+}
+
 Variant parse_message(Message& m, const char field)
 {
     const char* message = m.data.c_str();
@@ -78,8 +86,13 @@ Variant parse_message(Message& m, const char field)
 
 		// Figure out if we're looking at an integer or a floating point number
 		bool is_double = false;
-		for (uint32_t i = offset; i < end_pos; ++i)
+		for (uint32_t i = offset + 1; i < end_pos; ++i)
 		{
+			if (!is_number(message[i]) && message[i] != '.')
+			{
+				result.type = Variant::TYPE_INVALID;
+				return result;
+			}
 			if (message[i] == '.')
 			{
 				is_double = true;
