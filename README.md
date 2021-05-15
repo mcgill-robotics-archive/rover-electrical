@@ -3,7 +3,7 @@ Mars Rover Project Embedded Development
 
 # Issues:
 https://github.com/mcgill-robotics/rover-embedded/issues/90
-https://github.com/mcgill-robotics/rover-embedded/issues/89
+\n https://github.com/mcgill-robotics/rover-embedded/issues/89
 https://github.com/mcgill-robotics/rover-embedded/issues/88
 https://github.com/mcgill-robotics/rover-embedded/issues/87
 https://github.com/mcgill-robotics/rover-embedded/issues/86
