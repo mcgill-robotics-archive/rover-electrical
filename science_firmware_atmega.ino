@@ -67,6 +67,7 @@
 #include <Wire.h>
 #include <SPI.h>
 #include <IfxMotorControlShield.h>
+#include "Serial/SerialInterface.h"
 
 const int POWER_ON = 51;
 const int LIMIT_SWITCH_1 = 34;
@@ -86,7 +87,7 @@ const int INH_2 = 13;
 const int LASER1_CONTROL = 8;
 const int CCD_Clock = 2;
 const int SH = 20;
-const int ICG = 21;
+const int ICG_PIN = 21;
 const int SOLENOID_ON = 22;
 const int LED_CONTROL = 4;
 const int PELTIER_ON = 14;
@@ -125,13 +126,25 @@ int cmdR = 0;
 volatile int STEPPER1_FAULT = 0;
 volatile int STEPPER2_FAULT = 0;
 
-const int UART_BAUD_RATE = 115200;
-
 // Brushless DC motor constants
 bool MOTOR_INIT_FAILED = false;
 bool MOTOR_ON = false;
 int speedvalue = 0;
 int acceleration = 5;
+
+// UART stuff
+const int UART_BAUD_RATE = 115200;
+SerialInterface* UART = new SerialInterface("~", "#"); // Designated start and stop bytes respectively
+enum CommandReceived
+{
+    TURN_LED_ON, TURN_LED_OFF, TURN_SOLENOID_ON, TURN_SOLENOID_OFF, START_MOTOR_WITH_SPEED, STOP_MOTOR,
+    STEPPER1_MINIMUM_STEP, STEPPER1_INCREMENT_BY_ANGLE, STEPPER1_AGITATE, STEPPER1_CHANGE_DIRECTION, STEPPER2_MINIMUM_STEP,
+    STEPPER2_INCREMENT_BY_ANGLE, STEPPER2_CHANGE_DIRECTION, STEPPER2_AGITATE, CCD_SENSOR_SNAP,
+    TURN_PELTIER_ON, TURN_PELTIER_OFF, STEPPER1_GOTO_ANGLE, STEPPER2_GOTO_ANGLE
+};
+int default_start_speed = 5;
+double given_angle = 5;
+
 
 void setup() {
   // TODO: Look into CCD pins and figure out whether they are outputs or inputs
@@ -154,13 +167,16 @@ void setup() {
   pinMode(INH_2, OUTPUT);
   pinMode(CCD_Clock, OUTPUT);
   pinMode(SH, OUTPUT);
-  pinMode(ICG, OUTPUT);
+  pinMode(ICG_PIN, OUTPUT);
   pinMode(LIMIT_SWITCH_1, INPUT);
   pinMode(LIMIT_SWITCH_2, INPUT);
+  pinMode(PELTIER_ON, OUTPUT);
+
+  randomSeed(analogRead(0));
 
   // TODO: Communications setup (UART, I2C, SPI)
-  Serial.begin(UART_BAUD_RATE);
-  Serial1.begin(UART_BAUD_RATE);
+  //Serial.begin(UART_BAUD_RATE);
+  UART->begin(UART_BAUD_RATE);
 
   // Initial conditions for active low pins
   digitalWrite(STEPPER1_notENABLE, HIGH);
@@ -188,7 +204,7 @@ void setup() {
   //Initialize the clocks
   DDRD |= (SH | ICG); //Set ICG and SH lines to outputs for port D
   DDRE |= (MCLK); //Set Master Clock line to output for port E
-  PORTD |= ICG; set ICG line high
+  PORTD |= ICG; //set ICG line high
 
   //TODO: Set up timer to generate frquency on MCLK pin D2
   //No clock prescaling, clear timer on compare mode
@@ -207,7 +223,6 @@ void setup() {
 
 void loop() {
   // put your main code here, to run repeatedly:
-
   // Closed loop motor control
   if(MOTOR_ON){
     
@@ -239,6 +254,89 @@ void loop() {
    }
   }
 
+  UART->update_oneshot();
+  String next_command = UART->get_next_message().data;
+  int next_command_id;
+
+  switch(next_command_id)
+  {
+    case TURN_LED_ON:
+        LEDon();
+        break;
+        
+    case TURN_LED_OFF:
+        LEDoff();
+        break;
+        
+    case TURN_SOLENOID_ON:
+        solenoidOn();
+        break;
+        
+    case TURN_SOLENOID_OFF:
+        solenoidOff();
+        break;
+        
+    case START_MOTOR_WITH_SPEED:
+        startMotorWithSpeed(default_start_speed);
+        break;
+
+    case STOP_MOTOR:
+        stopMotor();
+        break;
+        
+    case STEPPER1_MINIMUM_STEP:
+        stepper1_step();
+        break;
+        
+    case STEPPER1_INCREMENT_BY_ANGLE:
+        stepper1_increment_angle(given_angle);
+        break;
+        
+    case STEPPER1_AGITATE:
+        stepper1_agitate();
+        break;
+        
+    case STEPPER1_CHANGE_DIRECTION:
+        stepper1_changedirection();
+        break;
+        
+    case STEPPER2_MINIMUM_STEP:
+        stepper2_step();
+        break;
+        
+    case STEPPER2_INCREMENT_BY_ANGLE:
+        stepper2_increment_angle(given_angle);
+        break;
+        
+    case STEPPER2_AGITATE:
+        stepper2_agitate();
+        break;
+        
+    case STEPPER2_CHANGE_DIRECTION:
+        stepper2_changedirection();
+        break;
+
+    case CCD_SENSOR_SNAP:
+        CCDread();
+        sendData();
+        break;
+
+    case TURN_PELTIER_ON:
+        peltierOn();
+        break;
+
+    case TURN_PELTIER_OFF:
+        peltierOff();
+        break;
+
+    case STEPPER1_GOTO_ANGLE:
+        stepper1_goto_angle(given_angle);
+
+    case STEPPER2_GOTO_ANGLE:
+        stepper2_goto_angle(given_angle);
+  }
+
+  
 }
 
 // ___[BRUSHLESS DC MOTOR]___________________________________________
@@ -256,12 +354,6 @@ void stopMotor(){
   MOTOR_ON = false;
 }
 
-//___Reading Data from CCD_____________________________________________
-
-
-
-
-
 // ___[LED]____________________________________________________________
 
 void LEDon(){
@@ -270,6 +362,16 @@ void LEDon(){
 
 void LEDoff(){
   digitalWrite(LED_CONTROL, LOW);
+}
+
+// ___[PELTIER COOLER]_________________________________________________
+
+void peltierOn(){
+  digitalWrite(PELTIER_ON, HIGH);
+}
+
+void peltierOff(){
+  digitalWrite(PELTIER_ON, LOW);
 }
 
 // ___[SOLENOID]_______________________________________________________
@@ -305,8 +407,80 @@ bool STEPPER2_FORWARD = true;
 double STEPPER1_CURRENT_ANGLE = 45;
 double STEPPER2_CURRENT_ANGLE = 45;
 double ANGLE_PER_STEP = 0.1125;
+int WIGGLE_STEPS = 100;
+int MAX_WIGGLE_DEVIATION = 16; // (16 * 0.1125 = 1.8 deg)
+
+void stepper1_agitate(){
+  
+  for(int i = 0; i < WIGGLE_STEPS; i++){
+    
+    int steps = random(1, MAX_WIGGLE_DEVIATION);
+    
+    // Move forward
+    for(int j = 0; j < steps; j++){
+      stepper1_step();
+    }
+    
+    stepper1_changedirection();
+    
+    // Move 2x backwards, ending up at the same deviation but
+    // at the opposite end
+    for(int j = 0; j < (2*steps); j++){
+      stepper1_step();
+    }
+
+    stepper1_changedirection();
+    
+    // Move forward again, ending up where we started
+    for(int j = 0; j < steps; j++){
+      stepper1_step();
+    }
+    
+  }
+  
+}
+
+void stepper2_agitate(){
+
+  for(int i = 0; i < WIGGLE_STEPS; i++){
+    
+    int steps = random(1, MAX_WIGGLE_DEVIATION);
+    
+    // Move forward
+    for(int j = 0; j < steps; j++){
+      stepper2_step();
+    }
+    
+    stepper2_changedirection();
+    
+    // Move 2x backwards, ending up at the same deviation but
+    // at the opposite end
+    for(int j = 0; j < (2*steps); j++){
+      stepper2_step();
+    }
+
+    stepper1_changedirection();
+    
+    // Move forward again, ending up where we started
+    for(int j = 0; j < steps; j++){
+      stepper2_step();
+    }
+    
+  }
+  
+}
 
 void stepper1_goto_angle(double angle){
+  double diff = (angle - STEPPER1_CURRENT_ANGLE);
+  stepper1_increment_angle(diff);
+}
+
+void stepper2_goto_angle(double angle){
+  double diff = (angle - STEPPER1_CURRENT_ANGLE);
+  stepper2_increment_angle(diff);
+}
+
+void stepper1_increment_angle(double angle){
   int n = round(angle/ANGLE_PER_STEP);
   
   if(n == 0) return;
@@ -322,7 +496,7 @@ void stepper1_goto_angle(double angle){
   }
 }
 
-void stepper2_goto_angle(double angle){
+void stepper2_increment_angle(double angle){
   int n = round(angle/ANGLE_PER_STEP);
   
   if(n == 0) return;
@@ -428,13 +602,7 @@ void stepper2_changedirection(){
 
 //____[CCD SENSOR]______________________________________________________________________
 
-// Half done function just to write down thoughts and get something started.
-// We should try to find a way to probe the CCD clock signal as defined above.
-
 void CCDread(){
-//   int x; 
-//   uint16_t result;
-  
   
 //   PORTD &= ~ICG;      // set ICG line low
 //   PORTD |= SH         // turn SH line high
@@ -451,13 +619,16 @@ void CCDread(){
 //   CCDSensorReadDataStream();  // Start listening to A3, keep listening for (INTEGRATION_TIME - 1500 ns)
 
   // On the rising edge of the CCD clock;
-  PORTD &= ~ICG;      //set ICG line low
-  _delay_loop_1(8);   // delay 500ns on ATMega 2560
-  PORTD |= SH         //turn SH line high after delay
-  _delay_loop_1(16);  // delay 1000 ns on ATMega 2560
-  PORTD &= ~SH        //turn SH line low
-  _delay_loop_1(16);  // delay 1000 ns on ATMega 2560
-  PORTD |= ICG;       //set ICG line high
+  PORTD &= ~ICG;       //set ICG line low
+  _delay_loop_1(8);    // delay 500ns on ATMega 2560
+  PORTD |= SH;         //turn SH line high after delay
+  _delay_loop_1(16);   // delay 1000 ns on ATMega 2560
+  PORTD &= ~SH;        //turn SH line low
+  _delay_loop_1(16);   // delay 1000 ns on ATMega 2560
+  PORTD |= ICG;        //set ICG line high
+
+  int x; 
+  uint16_t result;
   
   for (x = 0; x < PIXELS; x++) {
         PORTD |= SH;
@@ -490,24 +661,34 @@ void sendData(){
 // ___[INTERRUPTS]______________________________________________________________________
 
 void stepperonefault_ISR(){
+  // Direct port manipulation to shut down everything quickly, starting with relay
+  // which is on Port B. Does the same thing as the commented out portion below, but
+  // more manually and turns off every pin (except active low ones)
+  
+  PORTB = B00001000; // PB3 -> high, PB2-PB7 low
+  PORTA = B00000000; // PA0 -> low
+  PORTD = B00000000; // PD1 -> low
+  PORTE = B00000000; // PE4,PE5 -> low
+  PORTG = B00000000; // PG1 -> low
+  PORTH = B00000000; // PH5 -> low
+  PORTJ = B00000000; // PJ1 -> low
+  PORTL = B00100000; // PL3, PL7 -> low, PL5 -> high
+  
   // Turn off relay
-  digitalWrite(51, LOW);
+//  digitalWrite(51, LOW);
   
   // Shut down steppers (starting with #1) before anything else. If there's a fault in that stepper,
   // odds are that it will get hurt first
-  digitalWrite(44, HIGH);
-  digitalWrite(50, HIGH);
-
-  // Shut down regulator if it hasn't shut down already
-  digitalWrite(7, HIGH);
+//  digitalWrite(44, HIGH);
+//  digitalWrite(50, HIGH);
 
   // Shut down the rest of the board, starting with the brushed motor
-  stopMotor();
-  LEDoff();
-  laserOff();
-  solenoidOff();
-
-  STEPPER1_FAULT = 1;
+//  stopMotor();
+//  LEDoff();
+//  laserOff();
+//  solenoidOff();
+//
+//  STEPPER1_FAULT = 1;
 
   // Maybe some code here to tell the power board and the main computer that something
   // went wrong with stepper #1?
@@ -519,24 +700,35 @@ void stepperonefault_ISR(){
 }
 
 void steppertwofault_ISR(){
+  
+  // Direct port manipulation to shut down everything quickly, starting with relay
+  // which is on Port B. Does the same thing as the commented out portion below, but
+  // more manually and turns off every pin (except active low ones)
+  
+  PORTB = B00001000; // PB3 -> high, PB2-PB7 low
+  PORTA = B00000000; // PA0 -> low
+  PORTD = B00000000; // PD1 -> low
+  PORTE = B00000000; // PE4,PE5 -> low
+  PORTG = B00000000; // PG1 -> low
+  PORTH = B00000000; // PH5 -> low
+  PORTJ = B00000000; // PJ1 -> low
+  PORTL = B00100000; // PL3, PL7 -> low, PL5 -> high
+  
   // Turn off relay
-  digitalWrite(51, LOW);
+//  digitalWrite(51, LOW);
   
   // Shut down steppers (starting with #1) before anything else. If there's a fault in that stepper,
   // odds are that it will get hurt first
-  digitalWrite(50, HIGH);
-  digitalWrite(44, HIGH);
-
-  // Shut down regulator if it hasn't shut down already
-  digitalWrite(7, HIGH);
+//  digitalWrite(50, HIGH);
+//  digitalWrite(44, HIGH);
 
   // Shut down the rest of the board, starting with the brushed motor
-  stopMotor();
-  LEDoff();
-  laserOff();
-  solenoidOff();
-
-  STEPPER2_FAULT = 1;
+//  stopMotor();
+//  LEDoff();
+//  laserOff();
+//  solenoidOff();
+//
+//  STEPPER2_FAULT = 1;
 
   // Maybe some code here to tell the power board and the main computer that something
   // went wrong with stepper #2?
