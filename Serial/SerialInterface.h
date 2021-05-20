@@ -26,18 +26,30 @@ struct Message
 class SerialInterface
 {
 public:
-    SerialInterface()
+    SerialInterface(char start_byt, char stop_byt)
     {
         // initialize the array to false
         for (uint8_t i = 0; i < MAX_QUEUE_SIZE; i++)
         {
             priority_ids[i] = false;
         }
+//        this->start_byte = start_byte;
+//        this->stop_byte = stop_byte;
+        
+        start_byte = start_byt;
+        stop_byte = stop_byt;
+        
     }
 
     void begin(int _baudrate)
     {
         Serial.begin(_baudrate);
+    }
+
+    void update_oneshot(){
+      if (Serial.available() > 0){
+        process_incoming(Serial.read());
+      }
     }
 
     void update()
@@ -80,13 +92,13 @@ public:
         String result;
         result.reserve(sizeof(char) * (6 + message.data.length()));
 
-        result += '~';
+        result += start_byte;
         result += message.systemID;
         result += message.frameID;
         result += message.checksum;
         result += message.frameType;
         result += message.data;
-        result += "#";
+        result += stop_byte;
 
         return result;
     }
@@ -102,12 +114,12 @@ private:
         {
             case S_WAITING: // Waiting for start of a new packet
                 // if expecting a packet and byte is not start byte, break.
-                if (in_byte != '~') break;
+                if (in_byte != start_byte) break;
                 state = S_READING_HEADER;
                 header_pos = 0;
                 break;
             case S_READING_HEADER: // Reading the header information for a packet.
-                if (in_byte == '#') // If the end byte is read, break.
+                if (in_byte == stop_byte) // If the end byte is read, break.
                 {
                     message = Message();
                     state = S_WAITING;
@@ -136,7 +148,7 @@ private:
                 }
                 break;
             case S_READING_PAYLOAD:
-                if (in_byte == '#') // If the end byte is read, process the message and break.
+                if (in_byte == stop_byte) // If the end byte is read, process the message and break.
                 {
                     validate_message(message);
                     message = Message();
@@ -173,6 +185,8 @@ private:
     Queue<Message> priority_in_messages;
     bool priority_ids[MAX_QUEUE_SIZE];  // Each index into this array represents an id, if the value is true then it is a priority message
     Message out_messages[MAX_QUEUE_SIZE];
+    char start_byte;
+    char stop_byte;
 
     uint8_t next_message_id = 0;
 };
