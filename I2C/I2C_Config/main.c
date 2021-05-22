@@ -11,15 +11,18 @@
 #include "driverlib/gpio.h"
 #include "driverlib/pin_map.h"
 
-void intI2C_CONFIG(uint32_t ui32Peripheral, uint32_t ui32Base, uint8_t ui8SlaveAddr, bool bFast, uint32_t ui32Config);
-void write(uint8_t ui8SlaveAddr, uint32_t ui32Base, bool bReceive, uint8_t num_args);
+//hardcoding slave address (SDA)
+//#define ui8SlaveAddr 0x40
+
+void intI2C_CONFIG(uint32_t ui32Peripheral, uint32_t ui32PeripheralGPIO, uint32_t ui32Base, bool bFast, uint32_t ui32PinConfigSCL, uint32_t ui32PinConfigSDA, uint32_t ui32port, uint8_t ui8pinSCL, uint8_t ui8pinSDA);
+void write(uint8_t ui8SlaveAddr, uint32_t ui32Base, bool bReceive, uint8_t num_args, ...);
 uint32_t read(uint8_t ui8SlaveAddr, uint8_t ui8reg, uint32_t ui32Base, bool bReceive); 
 
 int main(void)
 {
     //SYSCTL_PERIPH_I2C0, SYSCTL_PERIPH_GPIOB I2C0_BASE are macros
     //GPIO_PB2_I2C0SCL, GPIO_PB3_I2C0SDA are the pins corresponding to the SDA and SCL for I2C Module 0
-    intI2C_CONFIG(SYSCTL_PERIPH_I2C0, SYSCTL_PERIPH_GPIOB, I2C0_BASE, true, GPIO_PB2_I2C0SCL, GPIO_PB3_I2C0SDA, GPIO_PORTB_BASE, GPIO_PIN_2, GPIO_PIN_3);
+    intI2C_CONFIG(SYSCTL_PERIPH_I2C0, SYSCTL_PERIPH_GPIOB, I2C0_BASE, ui8SlaveAddr, true, GPIO_PB2_I2C0SCL, GPIO_PB3_I2C0SDA, GPIO_PORTB_BASE, GPIO_PIN_2, GPIO_PIN_3);
 }
 
 /* Enable i2c peripherial
@@ -55,8 +58,7 @@ void intI2C_CONFIG(uint32_t ui32Peripheral, uint32_t ui32PeripheralGPIO, uint32_
         //
         I2CMasterInitExpClk(ui32Base, SysCtlClockGet(), bFast);
         //
-        // Specify slave address
-        //Commented out because the false bool is only for writing...we should make this line in the read/write method later
+        //Set Master to writing by default
         //I2CMasterSlaveAddrSet(ui32Base, ui8SlaveAddr, false);
         //commented out because I don't think our MCU has a FIFO for i2c
         //I2CRxFIFOConfigSet(ui32Base, ui32Config);
