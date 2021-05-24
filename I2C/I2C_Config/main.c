@@ -11,6 +11,8 @@
 #include "driverlib/gpio.h"
 #include "driverlib/pin_map.h"
 
+uint32_t data; 
+
 //hardcoding slave address (SDA)
 //#define ui8SlaveAddr 0x40
 
@@ -22,7 +24,14 @@ int main(void)
 {
     //SYSCTL_PERIPH_I2C0, SYSCTL_PERIPH_GPIOB I2C0_BASE are macros
     //GPIO_PB2_I2C0SCL, GPIO_PB3_I2C0SDA are the pins corresponding to the SDA and SCL for I2C Module 0
-    intI2C_CONFIG(SYSCTL_PERIPH_I2C0, SYSCTL_PERIPH_GPIOB, I2C0_BASE, ui8SlaveAddr, true, GPIO_PB2_I2C0SCL, GPIO_PB3_I2C0SDA, GPIO_PORTB_BASE, GPIO_PIN_2, GPIO_PIN_3);
+    intI2C_CONFIG(SYSCTL_PERIPH_I2C0, SYSCTL_PERIPH_GPIOB, I2C0_BASE, true, GPIO_PB2_I2C0SCL, GPIO_PB3_I2C0SDA, GPIO_PORTB_BASE, GPIO_PIN_2, GPIO_PIN_3);
+
+    write(4, I2C0_BASE, false, 2, 0, 0x01);
+
+    data = read(4, 0, I2C0_BASE, true);
+
+    printf("%d\n", data);
+
 }
 
 /* Enable i2c peripherial
@@ -50,8 +59,7 @@ void intI2C_CONFIG(uint32_t ui32Peripheral, uint32_t ui32PeripheralGPIO, uint32_
         GPIOPinTypeI2CSCL(ui32port, ui8pinSCL);
         // Wait for the I2C0 module to be ready.
         //
-        while(!SysCtlPeripheralReady(ui32Peripheral))
-        {
+        while(!SysCtlPeripheralReady(ui32Peripheral)){
         }
         //
         // Initialize Master and Slave
@@ -101,7 +109,7 @@ void write(uint8_t ui8SlaveAddr, uint32_t ui32Base, bool bReceive, uint8_t num_a
         
         for(uint8_t i = 1; i < (num_args - 1); i++){
             //load data into MCU register
-            I2CMasterDataPut(ui32Base, va_args(vargs, uint32_t));
+            I2CMasterDataPut(ui32Base, va_args(vargs, uint8_t));
             
             //Send data that was just loaded into register
             I2CMasterControL(ui32Base, I2C_MASTER_CMD_BURST_SEND_CONT);
@@ -110,7 +118,7 @@ void write(uint8_t ui8SlaveAddr, uint32_t ui32Base, bool bReceive, uint8_t num_a
             while(I2CMasterBusy(ui32Base));
         }
         //load last piece of data into I2C FIFO
-        I2CMasterDataPut(ui32Base, va_args(vargs, uint32_t)); 
+        I2CMasterDataPut(ui32Base, va_args(vargs, uint8_t)); 
         
         //send last piece of data from MCU
         I2CMasterControl(ui32Base, I2C_MASTER_CMD_BURST_SEND_FINISH);
