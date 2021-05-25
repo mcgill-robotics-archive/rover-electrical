@@ -210,6 +210,8 @@ void setup() {
 
   // Turn on LED
   digitalWrite(LED_CONTROL, HIGH);
+  
+  // CCD sensor setup ________________________________________________
 
   //Initialize the clocks
   DDRD |= (SH | ICG); //Set ICG and SH lines to outputs for port D
