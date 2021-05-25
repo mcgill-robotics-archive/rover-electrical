@@ -1,7 +1,7 @@
 /*
  * ----------[PINOUT]----------
  * (Also see documentation: 
- * https://github.com/mcgill-robotics/rover-pcb/blob/science-dev/Projects/science.pdf)
+ * https://github.com/mcgill-robotics/rover-pcb/blob/science-dev-external-regulator/Projects/science_external_regulator.pdf)
  * 
  * ----[Fault Detection/Shutdown Lines]----
  * D51 - POWER_ON: Set high to enable the relay, allowing the rest of the board to get power.
@@ -67,7 +67,7 @@
 #include <Wire.h>
 #include <SPI.h>
 #include <IfxMotorControlShield.h>
-#include "Serial/SerialInterface.h"
+#include "SerialInterface.h"
 
 const int POWER_ON = 51;
 const int LIMIT_SWITCH_1 = 34;
@@ -91,6 +91,8 @@ const int ICG_PIN = 21;
 const int SOLENOID_ON = 22;
 const int LED_CONTROL = 4;
 const int PELTIER_ON = 14;
+
+const int SCIENCE_BOARD_ID;
 
 #define AD_1 A0
 #define AD_2 A1
@@ -129,22 +131,30 @@ volatile int STEPPER2_FAULT = 0;
 // Brushless DC motor constants
 bool MOTOR_INIT_FAILED = false;
 bool MOTOR_ON = false;
-int speedvalue = 0;
+int speedvalue = 5;
 int acceleration = 5;
 
 // UART stuff
 const int UART_BAUD_RATE = 115200;
-SerialInterface* UART = new SerialInterface("~", "#"); // Designated start and stop bytes respectively
-enum CommandReceived
-{
-    TURN_LED_ON, TURN_LED_OFF, TURN_SOLENOID_ON, TURN_SOLENOID_OFF, START_MOTOR_WITH_SPEED, STOP_MOTOR,
-    STEPPER1_MINIMUM_STEP, STEPPER1_INCREMENT_BY_ANGLE, STEPPER1_AGITATE, STEPPER1_CHANGE_DIRECTION, STEPPER2_MINIMUM_STEP,
-    STEPPER2_INCREMENT_BY_ANGLE, STEPPER2_CHANGE_DIRECTION, STEPPER2_AGITATE, CCD_SENSOR_SNAP,
-    TURN_PELTIER_ON, TURN_PELTIER_OFF, STEPPER1_GOTO_ANGLE, STEPPER2_GOTO_ANGLE
-};
-int default_start_speed = 5;
-double given_angle = 5;
+byte SCIENCE_BOARD_SYSTEM_ID = 3;
+SerialInterface* UART = new SerialInterface(); // Designated start and stop bytes respectively
+enum CommandReceived // Command followed by argument, state of LED, solenoid, peltier. LEDState(on/off)
+                     // MotorSpeed(value, could also be zero) 
+                     // increment by angle(float, 0.1125 minimum). minimum step becomes redundant. 
+                     // if the angle is less than 0.1125, set it to 0.1125
+                     // no point in having change direction command
+                     // stepper 1 zero (boolean), stepper 2 zero (boolean) instead of "go to angle"
+                     // stepper agitate stays as it is
+                     // 12 commands in total
+                     // (Science board will have specific ID that is the same for all messages)
 
+                     // Optionally, signal to board that steppers/DC motor failure. (not priority)
+                     
+{
+    LED_STATE, LASER_STATE, SOLENOID_STATE, START_MOTOR_WITH_SPEED,
+    STEPPER1_INCREMENT_BY_ANGLE, STEPPER1_AGITATE, STEPPER2_INCREMENT_BY_ANGLE,
+    STEPPER2_AGITATE, CCD_SENSOR_SNAP, PELTIER_STATE, STEPPER1_ZERO, STEPPER2_ZERO
+};
 
 void setup() {
   // TODO: Look into CCD pins and figure out whether they are outputs or inputs
@@ -253,67 +263,87 @@ void loop() {
      stopMotor();
    }
   }
-
+  
+  // Receive and parse commands from main computer
   UART->update_oneshot();
-  String next_command = UART->get_next_message().data;
-  int next_command_id;
+  Message next_command = UART->get_next_message();
+  parseUART(next_command);
+}
+
+// ___[SERIAL COMMS]_________________________________________________
+void parseUART(Message message){
+  uint16_t next_command_id;
+  
+  // If a message that isn't supposed to be for the science board is received, ignore it.
+  if(message.systemID != SCIENCE_BOARD_SYSTEM_ID){
+    return;
+  }
+
+  int motor_speed = 5;
+  double stepper1_angle = 5;
+  double stepper2_angle = 5;
+  bool led_state = false;
+  bool solenoid_state = false;
+  bool peltier_state = false;
+  bool laser_state = false;
+
+  // Format to identify commands from payload TBD
 
   switch(next_command_id)
   {
-    case TURN_LED_ON:
-        LEDon();
+    case LED_STATE:
+    
+        if(led_state){
+          LEDon();
+        }else{
+          LEDoff();
+        }
         break;
         
-    case TURN_LED_OFF:
-        LEDoff();
-        break;
-        
-    case TURN_SOLENOID_ON:
-        solenoidOn();
-        break;
-        
-    case TURN_SOLENOID_OFF:
-        solenoidOff();
+    case SOLENOID_STATE:
+    
+        if(solenoid_state){
+          solenoidOn();
+        }else{
+          solenoidOff();
+        }
         break;
         
     case START_MOTOR_WITH_SPEED:
-        startMotorWithSpeed(default_start_speed);
-        break;
-
-    case STOP_MOTOR:
-        stopMotor();
-        break;
-        
-    case STEPPER1_MINIMUM_STEP:
-        stepper1_step();
+    
+        if(motor_speed == 0){
+          stopMotor();
+        }else if (!MOTOR_ON){
+          startMotorWithSpeed(motor_speed);
+        }else{
+          ifxMcsBiDirectionalMotor.setBiDirectionalSpeed(speedvalue);
+        }
         break;
         
     case STEPPER1_INCREMENT_BY_ANGLE:
-        stepper1_increment_angle(given_angle);
+    
+        if(stepper1_angle < 0.1125){
+          stepper1_angle = 0.1125;
+        }
+        
+        stepper1_increment_angle(stepper1_angle);
         break;
         
     case STEPPER1_AGITATE:
         stepper1_agitate();
         break;
         
-    case STEPPER1_CHANGE_DIRECTION:
-        stepper1_changedirection();
-        break;
-        
-    case STEPPER2_MINIMUM_STEP:
-        stepper2_step();
-        break;
-        
     case STEPPER2_INCREMENT_BY_ANGLE:
-        stepper2_increment_angle(given_angle);
+    
+        if(stepper2_angle < 0.1125){
+          stepper2_angle = 0.1125;
+        }
+        
+        stepper2_increment_angle(stepper2_angle);
         break;
         
     case STEPPER2_AGITATE:
         stepper2_agitate();
-        break;
-        
-    case STEPPER2_CHANGE_DIRECTION:
-        stepper2_changedirection();
         break;
 
     case CCD_SENSOR_SNAP:
@@ -321,22 +351,32 @@ void loop() {
         sendData();
         break;
 
-    case TURN_PELTIER_ON:
-        peltierOn();
+    case LASER_STATE:
+    
+        if(laser_state){
+          laserOn();
+        }else{
+          laserOff();
+        }
         break;
 
-    case TURN_PELTIER_OFF:
-        peltierOff();
+    case PELTIER_STATE:
+    
+        if(peltier_state){
+          peltierOn();
+        }else{
+          peltierOff();
+        }
         break;
 
-    case STEPPER1_GOTO_ANGLE:
-        stepper1_goto_angle(given_angle);
+    case STEPPER1_ZERO:
+        stepper1_goto_angle(45);
+        break;
 
-    case STEPPER2_GOTO_ANGLE:
-        stepper2_goto_angle(given_angle);
+    case STEPPER2_ZERO:
+        stepper2_goto_angle(45);
+        break;
   }
-
-  
 }
 
 // ___[BRUSHLESS DC MOTOR]___________________________________________
