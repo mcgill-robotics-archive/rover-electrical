@@ -1,0 +1,913 @@
+#include <IfxMotorControlShield.h>
+
+/*
+ * ----------[PINOUT]----------
+ * (Also see documentation: 
+ * https://github.com/mcgill-robotics/rover-pcb/blob/science-dev-external-regulator/Projects/science_external_regulator.pdf)
+ * 
+ * ----[Fault Detection/Shutdown Lines]----
+ * D51 - POWER_ON: Set high to enable the relay, allowing the rest of the board to get power.
+ * 
+ * D38 - notFAULT1: High when Stepper #1 is not in a fault condition
+ * D36 - notFAULT2: High when Stepper #2 is not in a fault condition
+ * D44 - STEPPER1_notENABLE: Stepper #1 is enabled when this pin is low.
+ * D50 - STEPPER2_notENABLE: Stepper #2 is enabled when this pin is low.
+ * 
+ * ----[Stepper Control Lines]----
+ * D42 - STEPPER1_STEP: Stepper #1 will advance one step on the rising edge of this pin.
+ * D40 - STEPPER1_DIRECTION: Stepper #1 will change direction on the rising edge of this pin.
+ * D48 - STEPPER2_STEP: Stepper #2 will advance one step on the rising edge of this pin.
+ * D46 - STEPPER2_DIRECTION: Stepper #2 will change direction on the rising edge of this pin.
+ * 
+ * ----[Limit Switches]----
+ * D34 - LIMIT_SWITCH_1
+ * D52 - LIMIT_SWITCH_2
+ * 
+ * ----[DC Motor Control Lines]----
+ * Will use this library: https://github.com/Infineon/DC-Motor-Control-BTN8982TA
+ * 
+ * D3 - IN_1: (Input Bridge 1)
+ * D11 - IN_2: (Input Bridge 2)
+ * D12 - INH_1: (Inhibit Bridge 1)
+ * D13 - INH_2: (Inhibit Bridge 2)
+ * A0 - AD_1
+ * A1 - AD_2
+ * 
+ * ----[Laser]----
+ * D8 - LASER1_CONTROL: Laser is on when this pin is high
+ * 
+ * ----[LED's]----
+ * D4 - LED_CONTROL: LED's are on when this pin is high
+ * 
+ * ----[Solenoid]----
+ * D22 - SOLENOID_ON: Solenoid is on when this pin is high
+ * 
+ * ----[CCD Sensor]----
+ * TODO: Figure out how the sensor works
+ * A3 - OutputSignal_out: “out” as in “out to Arduino”.
+ * D2 - phiM(CCD_Clock): Clock output to CCD sensor.
+ * D20 - SH: “Shift Gate” (???)
+ * D21 - ICG: “Integration Clear Gate” (???)
+ * 
+ * ----[Peltier cooler]----
+ * D14 - PELTIER_ON
+ * 
+ * ----[COMMUNICATION LINES]----
+ * 
+ * ----[USB Debugging]----
+ * D0, D1 (already assigned by default)
+ * 
+ * ----[Serial 1]----
+ * D18 - UART TX
+ * D19 - UART RX
+ * 
+ * ----[ADC]----
+ * Analog pins can do ADC by default.
+ * 
+ */
+
+#include <Wire.h>
+#include <SPI.h>
+#include <IfxMotorControlShield.h>
+#include "SerialInterface.h"
+
+const int POWER_ON = 51;
+const int LIMIT_SWITCH_1 = 34;
+const int LIMIT_SWITCH_2 = 52;
+const int notFAULT1 = 38;
+const int notFAULT2 = 36;
+const int STEPPER1_notENABLE = 44;
+const int STEPPER2_notENABLE = 50;
+const int STEPPER1_STEP = 42;
+const int STEPPER1_DIRECTION = 40;
+const int STEPPER2_STEP = 48;
+const int STEPPER2_DIRECTION = 46;
+const int IN_1 = 3;
+const int IN_2 = 11;
+const int INH_1 = 12;
+const int INH_2 = 13;
+const int LASER1_CONTROL = 8;
+const int CCD_Clock = 2;
+const int SH = 20;
+const int ICG_PIN = 21;
+const int SOLENOID_ON = 22;
+const int LED_CONTROL = 4;
+const int PELTIER_ON = 14;
+
+#define AD_1 A0
+#define AD_2 A1
+
+// CCD sensor defines
+#define OutputSignal_out A3
+#define CCD_CLOCK_PERIOD 50 // hundredth of usecs (1e-8 secs)
+#define CCD_CLOCK_DUTY_CYCLE 5 // 100 msecs in hundredth of usecs (1e-8 secs)
+
+#define SH_PERIOD 100 // some integer multiple of the clock period
+#define SH_DUTY_CYCLE 50
+
+#define ICG_PERIOD 200
+#define ICG_DUTY_CYCLE 50
+
+#define MCLK 0x10
+#define ICG 0x01
+#define SH  0x02
+#define PIXELS 3691
+#define MIN_SIGNAL 10
+
+
+//16-bit buffer for pixels
+uint16_t pixelBuffer[PIXELS];
+uint16_t avg = 0;
+
+char cmdBuffer[16];
+int exposureTime = 20; 
+int cmdIndex; 
+int cmdR = 0;
+
+// Failure conditions, in case they need to be communicated to the central computer
+volatile int STEPPER1_FAULT = 0;
+volatile int STEPPER2_FAULT = 0;
+
+// Brushless DC motor constants
+bool MOTOR_INIT_FAILED = false;
+bool MOTOR_ON = false;
+int speedvalue = 5;
+int acceleration = 5;
+
+// UART stuff
+const int UART_BAUD_RATE = 9600;
+byte SCIENCE_BOARD_SYSTEM_ID = 3;
+SerialInterface* UART = new SerialInterface('~','#'); // Designated start and stop bytes respectively
+
+void setup() {
+  // TODO: Look into CCD pins and figure out whether they are outputs or inputs
+  pinMode(POWER_ON, OUTPUT);
+  pinMode(SOLENOID_ON, OUTPUT);
+  pinMode(LED_CONTROL, OUTPUT);
+  pinMode(STEPPER1_notENABLE, OUTPUT);
+  pinMode(STEPPER2_notENABLE, OUTPUT);
+  pinMode(STEPPER1_STEP, OUTPUT);
+  pinMode(STEPPER1_DIRECTION, OUTPUT);
+  pinMode(STEPPER2_STEP, OUTPUT);
+  pinMode(STEPPER2_DIRECTION, OUTPUT);
+  pinMode(LASER1_CONTROL, OUTPUT);
+  pinMode(OutputSignal_out, INPUT);
+  pinMode(AD_1, INPUT);
+  pinMode(AD_2, INPUT);
+  pinMode(IN_1, OUTPUT);
+  pinMode(IN_2, OUTPUT);
+  pinMode(INH_1, OUTPUT);
+  pinMode(INH_2, OUTPUT);
+  pinMode(CCD_Clock, OUTPUT);
+  pinMode(SH, OUTPUT);
+  pinMode(ICG_PIN, OUTPUT);
+  pinMode(LIMIT_SWITCH_1, INPUT);
+  pinMode(LIMIT_SWITCH_2, INPUT);
+  pinMode(PELTIER_ON, OUTPUT);
+
+  randomSeed(analogRead(0));
+
+  // TODO: Communications setup (UART, I2C, SPI)
+  //Serial.begin(UART_BAUD_RATE);
+  UART->begin(UART_BAUD_RATE);
+
+  // Initial conditions for active low pin
+  digitalWrite(STEPPER1_notENABLE, HIGH);
+  digitalWrite(STEPPER2_notENABLE, HIGH);
+
+  // Update(18/03/2021): We now have an onboard relay
+  digitalWrite(POWER_ON, HIGH);
+
+  while(!(notFAULT1 and notFAULT2)){}           // Wait until both stepper IC's start up properly
+
+  //Attach interrupts to their ISR's (Interrupt Service Routines):
+  attachInterrupt(digitalPinToInterrupt(notFAULT1), stepperonefault_ISR, LOW);
+  attachInterrupt(digitalPinToInterrupt(notFAULT2), steppertwofault_ISR, LOW);
+  //(ISR's are at the bottom)
+
+  // Initialize brushless DC motor controller.
+  // Function returns true on failure, wtf?
+  if(ifxMcsBiDirectionalMotor.begin()){
+    MOTOR_INIT_FAILED = true;
+  }
+
+  // Turn on LED
+  digitalWrite(LED_CONTROL, HIGH);
+  
+  // CCD sensor setup ________________________________________________
+
+  //Initialize the clocks
+  DDRD |= (SH | ICG); //Set ICG and SH lines to outputs for port D
+  DDRE |= (MCLK); //Set Master Clock line to output for port E
+  PORTD |= ICG; //set ICG line high
+
+  //TODO: Set up timer to generate frquency on MCLK pin D2
+  //No clock prescaling, clear timer on compare mode
+  TCCR2A = (0 << COM2A1) | (1 << COM2A0) | (1 << WGM21) | (0 << WGM20);
+  TCCR2B = (0 << WGM22) |(1 << CS20); //no prescaling on the clock
+  OCR2A = 3; //used to calculate frequency of output through MCLK pin (don't know what fclk is)
+  TCNT2 = 0; //Reset timer2
+  
+  //Set ADC clock rate to sysclk/32
+  ADCSRA &= ~((1 << ADPS2) | (1 << ADPS1) | (1 << ADPS0));
+  ADCSRA |= (1 << ADPS2) | (1 << ADPS0);
+  
+  // TODO: Tell the power board and the main computer that the science board is fully booted
+  // and can receive commands
+}
+
+void loop() {
+  // put your main code here, to run repeatedly:
+  // Closed loop motor control
+  if(MOTOR_ON){
+    
+    if(ifxMcsBiDirectionalMotor.getCurrentSense() < IFX_MCS_CRITICALCURRENTSENSE)
+   {
+
+      speedvalue += acceleration;
+      if(speedvalue > 255 && acceleration > 0)
+      {
+        acceleration = -acceleration;
+        speedvalue = 255;
+      }
+      if(speedvalue < -255 && acceleration < 0)
+      {
+        acceleration = -acceleration;
+        speedvalue = -255;
+      }
+      
+      ifxMcsBiDirectionalMotor.setBiDirectionalSpeed(speedvalue);
+      
+    //if speed was set to 0, the motor has to be restarted
+      if(!ifxMcsBiDirectionalMotor.getRunning())
+        ifxMcsBiDirectionalMotor.start();
+   }
+   else
+   {
+    // Something went wrong, stop the motor
+     stopMotor();
+   }
+  }
+  
+  // Receive and parse commands from main computer
+  UART->update_oneshot();
+  Message next_command = UART->get_next_message();
+  parseUART(next_command);
+}
+
+// ___[SERIAL COMMS]_________________________________________________
+
+/* Command followed by argument, state of LED, solenoid, peltier. LEDState(on/off)
+                     MotorSpeed(value, could also be zero) 
+                     increment by angle(float, 0.1125 minimum). minimum step becomes redundant. 
+                     if the angle is less than 0.1125, set it to 0.1125
+                     no point in having change direction command
+                     stepper 1 zero (boolean), stepper 2 zero (boolean) instead of "go to angle"
+                     stepper agitate stays as it is
+                     13 commands in total
+                     (Science board will have specific ID that is the same for all messages)
+
+                     Optionally, signal to board that steppers/DC motor failure. (not priority)
+*/
+
+enum CommandReceived 
+{
+    LED_STATE, LASER_STATE, SOLENOID_STATE, START_MOTOR_WITH_SPEED,
+    STEPPER1_INCREMENT_BY_ANGLE, STEPPER1_AGITATE, STEPPER2_INCREMENT_BY_ANGLE,
+    STEPPER2_AGITATE, CCD_SENSOR_SNAP, PELTIER_STATE, STEPPER1_ZERO, STEPPER2_ZERO, SHUTDOWN
+};
+
+void parseUART(Message message){
+  
+  // If a message that isn't supposed to be for the science board is received, ignore it.
+  if(message.systemID != SCIENCE_BOARD_SYSTEM_ID){
+    return;
+  }
+  
+  /* Proposal for command format: "E123.456" = STEPPER1_INCREMENT_BY_ANGLE(123.456)
+                                  "A0" = LED_STATE(false)
+                                  "a[nonzero double]" = LED_STATE(true)
+  The alphabet is assigned to the enum above
+                                  
+  Pros: Easy to use and parse
+  Cons: Message body would be large because it's a string
+  */
+  
+  uint16_t next_command_id = message.data.charAt(0) - 65;
+  String argument_str = message.data.substring(1);
+  double next_command_argument = atof(argument_str.c_str());
+  int motor_speed;
+
+  // Format to identify commands from payload TBD
+
+  switch(next_command_id)
+  {
+    case LED_STATE:
+    
+        if(next_command_argument > 0){
+          LEDon();
+        }else{
+          LEDoff();
+        }
+        break;
+        
+    case SOLENOID_STATE:
+    
+        if(next_command_argument > 0){
+          solenoidOn();
+        }else{
+          solenoidOff();
+        }
+        break;
+        
+    case START_MOTOR_WITH_SPEED:
+        motor_speed = (int)next_command_argument;
+    
+        if(motor_speed == 0){
+          stopMotor();
+        }else if (!MOTOR_ON){
+          startMotorWithSpeed(motor_speed);
+        }else{
+          ifxMcsBiDirectionalMotor.setBiDirectionalSpeed(speedvalue);
+        }
+        break;
+        
+    case STEPPER1_INCREMENT_BY_ANGLE:
+    
+        if(next_command_argument < 0.1125){
+          next_command_argument = 0.1125;
+        }
+        
+        stepper1_increment_angle(next_command_argument);
+        break;
+        
+    case STEPPER1_AGITATE:
+        stepper1_agitate();
+        break;
+        
+    case STEPPER2_INCREMENT_BY_ANGLE:
+    
+        if(next_command_argument < 0.1125){
+          next_command_argument = 0.1125;
+        }
+        
+        stepper2_increment_angle(next_command_argument);
+        break;
+        
+    case STEPPER2_AGITATE:
+        stepper2_agitate();
+        break;
+
+    case CCD_SENSOR_SNAP:
+        CCDread();
+        sendData1();
+        break;
+
+    case LASER_STATE:
+    
+        if(next_command_argument > 0){
+          laserOn();
+        }else{
+          laserOff();
+        }
+        break;
+
+    case PELTIER_STATE:
+    
+        if(next_command_argument > 0){
+          peltierOn();
+        }else{
+          peltierOff();
+        }
+        break;
+
+    case STEPPER1_ZERO:
+        stepper1_goto_angle(45);
+        break;
+
+    case STEPPER2_ZERO:
+        stepper2_goto_angle(45);
+        break;
+
+    case SHUTDOWN:
+        shdn();
+        break;
+  }
+}
+
+// ___[BRUSHLESS DC MOTOR]___________________________________________
+void startMotorWithSpeed(int speedvalue){
+  if(!MOTOR_INIT_FAILED){
+    ifxMcsBiDirectionalMotor.setBiDirectionalSpeed(speedvalue);
+    ifxMcsBiDirectionalMotor.start();
+    MOTOR_ON = true;
+  }
+}
+
+void stopMotor(){
+  ifxMcsBiDirectionalMotor.stop();
+  speedvalue = 0;
+  MOTOR_ON = false;
+}
+
+// ___[LED]____________________________________________________________
+
+void LEDon(){
+  digitalWrite(LED_CONTROL, HIGH);
+}
+
+void LEDoff(){
+  digitalWrite(LED_CONTROL, LOW);
+}
+
+// ___[PELTIER COOLER]_________________________________________________
+
+void peltierOn(){
+  digitalWrite(PELTIER_ON, HIGH);
+}
+
+void peltierOff(){
+  digitalWrite(PELTIER_ON, LOW);
+}
+
+// ___[SOLENOID]_______________________________________________________
+
+void solenoidOn(){
+  digitalWrite(SOLENOID_ON, HIGH);
+}
+
+void solenoidOff(){
+  digitalWrite(SOLENOID_ON, LOW);
+}
+
+// ___[LASER]__________________________________________________________
+
+void laserOn(){
+  digitalWrite(LASER1_CONTROL, HIGH);
+}
+
+void laserOff(){
+  digitalWrite(LASER1_CONTROL, LOW);
+}
+
+// ___[STEPPERS]_______________________________________________________
+
+unsigned int MINIMUM_STEP_PULSE = 3; // Microseconds
+int MINIMUM_DISABLE_TIME = 1;        // Milliseconds
+int MINIMUM_ENABLE_TIME = 1;         // Milliseconds
+
+// 0 for forward, 1 for backward
+bool STEPPER1_FORWARD = true;
+bool STEPPER2_FORWARD = true;
+
+double STEPPER1_CURRENT_ANGLE = 45;
+double STEPPER2_CURRENT_ANGLE = 45;
+double ANGLE_PER_STEP = 0.1125;
+int WIGGLE_STEPS = 100;
+int MAX_WIGGLE_DEVIATION = 16; // (16 * 0.1125 = 1.8 deg)
+
+void stepper1_agitate(){
+  
+  for(int i = 0; i < WIGGLE_STEPS; i++){
+    
+    int steps = random(1, MAX_WIGGLE_DEVIATION);
+    
+    // Move forward
+    for(int j = 0; j < steps; j++){
+      stepper1_step();
+    }
+    
+    stepper1_changedirection();
+    
+    // Move 2x backwards, ending up at the same deviation but
+    // at the opposite end
+    for(int j = 0; j < (2*steps); j++){
+      stepper1_step();
+    }
+
+    stepper1_changedirection();
+    
+    // Move forward again, ending up where we started
+    for(int j = 0; j < steps; j++){
+      stepper1_step();
+    }
+    
+  }
+  
+}
+
+void stepper2_agitate(){
+
+  for(int i = 0; i < WIGGLE_STEPS; i++){
+    
+    int steps = random(1, MAX_WIGGLE_DEVIATION);
+    
+    // Move forward
+    for(int j = 0; j < steps; j++){
+      stepper2_step();
+    }
+    
+    stepper2_changedirection();
+    
+    // Move 2x backwards, ending up at the same deviation but
+    // at the opposite end
+    for(int j = 0; j < (2*steps); j++){
+      stepper2_step();
+    }
+
+    stepper1_changedirection();
+    
+    // Move forward again, ending up where we started
+    for(int j = 0; j < steps; j++){
+      stepper2_step();
+    }
+    
+  }
+  
+}
+
+void stepper1_goto_angle(double angle){
+  double diff = (angle - STEPPER1_CURRENT_ANGLE);
+  stepper1_increment_angle(diff);
+}
+
+void stepper2_goto_angle(double angle){
+  double diff = (angle - STEPPER1_CURRENT_ANGLE);
+  stepper2_increment_angle(diff);
+}
+
+void stepper1_increment_angle(double angle){
+  int n = round(angle/ANGLE_PER_STEP);
+  
+  if(n == 0) return;
+  if(n < 0 && STEPPER1_FORWARD){
+    stepper1_changedirection();
+  }
+  if(n > 0 && !STEPPER1_FORWARD){
+    stepper1_changedirection();
+  }
+  
+  for(int i = 0; i < n; i++){
+    stepper1_step();
+  }
+}
+
+void stepper2_increment_angle(double angle){
+  int n = round(angle/ANGLE_PER_STEP);
+  
+  if(n == 0) return;
+  if(n < 0 && STEPPER2_FORWARD){
+    stepper2_changedirection();
+  }
+  if(n > 0 && !STEPPER2_FORWARD){
+    stepper2_changedirection();
+  }
+  
+  for(int i = 0; i < n; i++){
+    stepper2_step();
+  }
+}
+
+void stepper1_step(){
+  
+  // Enable this stepper if it's not enabled and give it time to turn on
+  if(digitalRead(STEPPER1_notENABLE) == HIGH){
+    digitalWrite(STEPPER1_notENABLE, LOW);
+    delay(MINIMUM_ENABLE_TIME);
+  }
+
+  // Pulse this stepper
+  
+  digitalWrite(STEPPER1_STEP, HIGH);
+  delayMicroseconds(MINIMUM_STEP_PULSE);
+  digitalWrite(STEPPER1_STEP, LOW);
+  
+
+  // Internally keep track of the current angle,
+  // after everything else is done
+
+  if(STEPPER1_FORWARD){
+    
+    STEPPER1_CURRENT_ANGLE += ANGLE_PER_STEP;
+    if(STEPPER1_CURRENT_ANGLE >= 360){
+      STEPPER1_CURRENT_ANGLE -= 360;
+    }
+    
+  }else{
+    
+    STEPPER1_CURRENT_ANGLE -= ANGLE_PER_STEP;
+    if(STEPPER1_CURRENT_ANGLE < 0){
+      STEPPER1_CURRENT_ANGLE += 360;
+    }
+  }
+  
+}
+
+void stepper2_step(){
+  
+  // Enable this stepper if it's not enabled and give it time to turn on
+  if(digitalRead(STEPPER2_notENABLE) == HIGH){
+    digitalWrite(STEPPER2_notENABLE, LOW);
+    delay(MINIMUM_ENABLE_TIME);
+  }
+
+  // Pulse this stepper
+  
+  digitalWrite(STEPPER2_STEP, HIGH);
+  delayMicroseconds(MINIMUM_STEP_PULSE);
+  digitalWrite(STEPPER2_STEP, LOW);
+  
+
+  // Internally keep track of the current angle,
+  // after everything else is done
+
+  if(STEPPER2_FORWARD){
+    
+    STEPPER2_CURRENT_ANGLE += ANGLE_PER_STEP;
+    if(STEPPER2_CURRENT_ANGLE >= 360){
+      STEPPER2_CURRENT_ANGLE -= 360;
+    }
+    
+  }else{
+    
+    STEPPER2_CURRENT_ANGLE -= ANGLE_PER_STEP;
+    if(STEPPER2_CURRENT_ANGLE < 0){
+      STEPPER2_CURRENT_ANGLE += 360;
+    }
+  }
+  
+}
+
+void stepper1_changedirection(){
+  
+  digitalWrite(STEPPER1_DIRECTION, HIGH);
+  delayMicroseconds(3);
+  digitalWrite(STEPPER1_DIRECTION, LOW);
+  
+  STEPPER1_FORWARD = !STEPPER1_FORWARD;
+}
+
+void stepper2_changedirection(){
+  
+  digitalWrite(STEPPER2_DIRECTION, HIGH);
+  delayMicroseconds(3);
+  digitalWrite(STEPPER2_DIRECTION, LOW);
+  
+  STEPPER2_FORWARD = !STEPPER2_FORWARD;
+}
+
+//____[CCD SENSOR]______________________________________________________________________
+
+void CCDread(){
+  
+//   PORTD &= ~ICG;      // set ICG line low
+//   PORTD |= SH         // turn SH line high
+//   TCNT2 = 0;          // On the rising edge of the CCD clock;
+  
+//   _delay_loop_1(8);   // delay 500ns on ATMega 2560
+//   PORTD |= SH         // turn SH line high after delay
+//   _delay_loop_1(16);  // delay 1000 ns on ATMega 2560
+//   PORTD &= ~SH        // turn SH line low
+//   _delay_loop_1(16);  // delay 1000 ns on ATMega 2560
+
+//   TCNT2 = 0;                  // On the rising edge of the CCD clock;
+//   PORTD |= ICG                // ICG signal goes high.
+//   CCDSensorReadDataStream();  // Start listening to A3, keep listening for (INTEGRATION_TIME - 1500 ns)
+
+  // On the rising edge of the CCD clock;
+  PORTD &= ~ICG;       //set ICG line low
+  _delay_loop_1(8);    // delay 500ns on ATMega 2560
+  PORTD |= SH;         //turn SH line high after delay
+  _delay_loop_1(16);   // delay 1000 ns on ATMega 2560
+  PORTD &= ~SH;        //turn SH line low
+  _delay_loop_1(16);   // delay 1000 ns on ATMega 2560
+  PORTD |= ICG;        //set ICG line high
+
+  int x; 
+  uint16_t result;
+  
+  for (x = 0; x < PIXELS; x++) {
+        PORTD |= SH;
+        if (x == 0) {
+            result = (uint16_t)(1023 - analogRead(A3));
+            if (result > MIN_SIGNAL) {
+                avg = result - MIN_SIGNAL;
+            } else {
+                avg = result;
+            }
+        } else {
+            result = (uint16_t)(1023 - analogRead(A3));
+        }
+        if (result < avg) {
+            result = 0;
+        } else {
+            result -= avg;
+        }
+        pixelBuffer[x] = result;
+        delayMicroseconds(21);
+    }
+    PORTD &= ~SH; 
+}
+
+uint8_t frame_type = 0;
+
+//TODO: Write Method to Send Data via USB
+
+// Options 1-4 use String objects
+
+// Option 1: Generate CSV and send in one message
+void sendData1(){
+  String result = "";
+  for(int i = 0; i < PIXELS; i++){
+    result += String(pixelBuffer[i]);
+    result += ",";
+  }
+  result = result.substring(0,result.length() - 2);
+  UART->send_message(frame_type, result.c_str());
+}
+  
+// Option 2: Generate multiple packets of CSV's
+const int ints_per_packet = 100;
+void sendData2(){
+  
+  int packet_count = (PIXELS / ints_per_packet) + 1;
+  
+  for(int i = 0; i < packet_count; i++){
+    
+    String result = "";
+    result.reserve(PIXELS * 5);
+    for(int j = 0; j < ints_per_packet; j++){
+      result += String(pixelBuffer[j]);
+      result += ',';
+    }
+    result = result.substring(0,result.length() - 2);
+    UART->send_message(frame_type, result.c_str());
+    
+  }
+}
+
+// Option 3: Send every int one by one
+
+void sendData3(){
+  char result[5];
+  for(int i = 0; i < PIXELS; i++){
+    UART->send_message(frame_type, itoa(pixelBuffer[i], result, 10));
+  }
+}
+
+void makeCSVfromPixelBuffer(char result[]){
+  int idx = 0;
+  int exponent,digit,x;
+
+  for(int i = 0; i < PIXELS; i++){ // For each result in the pixel buffer,
+    x = pixelBuffer[i]; // 1121
+    exponent = 0;
+    // Figure out the order of magnitude
+    while(pow(10, exponent + 1) < x){exponent++;} // exponent = 3
+
+    for(exponent; exponent >= 0; exponent--){
+      digit = x / (pow(10, exponent));    // 1                        // 1                  // 2
+      x -= (digit * pow(10, exponent));   // 1121 - 1000 = 121        // 121 - 100 = 21     // 21 - 10 = 1
+      result[idx] = (char)(digit + 48);   // '1'                      // '1'                // '2'
+      idx++;
+    }
+
+    result[idx] = ',';
+    idx++;
+  }
+
+  result[idx] = '\0';
+}
+
+// Option 4: Same as Option 1 but uses C-style strings
+void sendData4(){
+  char CSV[5 * PIXELS];
+  makeCSVfromPixelBuffer(CSV);
+  UART->send_message(frame_type, CSV);
+}
+
+// Option 5: Use a specialized data type and procedure for sending CCD data
+void sendData5(){
+  UART->send_CCD_data(frame_type, pixelBuffer, PIXELS);
+}
+
+
+void sendData6(){
+  Serial.flush();
+
+  for(int i = 0; i < PIXELS; i++){
+    Serial.print(pixelBuffer[i]);
+    Serial.print(F(","));
+    Serial.flush();
+  }
+}
+
+
+// ___[NORMAL SHUTDOWN]_________________________________________________________________
+
+void shdn(){
+  noInterrupts();
+  
+  stopMotor();
+  laserOff();
+  // Turn off steppers
+  digitalWrite(44, HIGH);
+  digitalWrite(50, HIGH);
+  peltierOff();
+  solenoidOff();
+  
+  delay(1000);
+  LEDoff();
+
+  // Turn off relay
+  digitalWrite(51, LOW);
+  
+  // Do nothing until power is lost
+  while(1){}
+  
+}
+  
+// ___[INTERRUPT SHUTDOWN]______________________________________________________________
+
+void stepperonefault_ISR(){
+  // Direct port manipulation to shut down everything quickly, starting with relay
+  // which is on Port B. Does the same thing as the commented out portion below, but
+  // more manually and turns off every pin (except active low ones)
+  
+  PORTB = B00001000; // PB3 -> high, PB2-PB7 low
+  PORTA = B00000000; // PA0 -> low
+  PORTD = B00000000; // PD1 -> low
+  PORTE = B00000000; // PE4,PE5 -> low
+  PORTG = B00000000; // PG1 -> low
+  PORTH = B00000000; // PH5 -> low
+  PORTJ = B00000000; // PJ1 -> low
+  PORTL = B00100000; // PL3, PL7 -> low, PL5 -> high
+
+  STEPPER1_FAULT = 1;
+  
+  // Turn off relay
+//  digitalWrite(51, LOW);
+  
+  // Shut down steppers (starting with #1) before anything else. If there's a fault in that stepper,
+  // odds are that it will get hurt first
+//  digitalWrite(44, HIGH);
+//  digitalWrite(50, HIGH);
+
+  // Shut down the rest of the board, starting with the brushed motor
+//  stopMotor();
+//  LEDoff();
+//  laserOff();
+//  solenoidOff();
+//
+//  STEPPER1_FAULT = 1;
+
+  // Maybe some code here to tell the power board and the main computer that something
+  // went wrong with stepper #1?
+
+  // Hang until power is cycled
+  while(1){
+    // Or maybe until the main computer tells the board to keep going?
+    }
+}
+
+void steppertwofault_ISR(){
+  
+  // Direct port manipulation to shut down everything quickly, starting with relay
+  // which is on Port B. Does the same thing as the commented out portion below, but
+  // more manually and turns off every pin (except active low ones)
+  
+  PORTB = B00001000; // PB3 -> high, PB2-PB7 low
+  PORTA = B00000000; // PA0 -> low
+  PORTD = B00000000; // PD1 -> low
+  PORTE = B00000000; // PE4,PE5 -> low
+  PORTG = B00000000; // PG1 -> low
+  PORTH = B00000000; // PH5 -> low
+  PORTJ = B00000000; // PJ1 -> low
+  PORTL = B00100000; // PL3, PL7 -> low, PL5 -> high
+
+  STEPPER2_FAULT = 1;
+  
+  // Turn off relay
+//  digitalWrite(51, LOW);
+  
+  // Shut down steppers (starting with #1) before anything else. If there's a fault in that stepper,
+  // odds are that it will get hurt first
+//  digitalWrite(50, HIGH);
+//  digitalWrite(44, HIGH);
+
+  // Shut down the rest of the board, starting with the brushed motor
+//  stopMotor();
+//  LEDoff();
+//  laserOff();
+//  solenoidOff();
+//
+//  STEPPER2_FAULT = 1;
+
+  // Maybe some code here to tell the power board and the main computer that something
+  // went wrong with stepper #2?
+
+  // Hang until power is cycled
+  while(1){
+    // Or maybe until the main computer tells the board to keep going?
+    }
+}
