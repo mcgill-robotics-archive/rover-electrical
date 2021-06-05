@@ -30,8 +30,30 @@ int main(void)
 
     data = read(4, 0, I2C0_BASE, true);
 
-    printf("%d\n", data);
+    if(data == 1){
+        //Enable led peripheral (port f)
+        SYSCTL-> RCGCGPIO = 0x20; 
 
+        GPIOF -> DIR = 0xE; 
+
+        GPIOF -> DEN = 0xE; 
+
+        //toggle the different coloured LEDs
+        GPIOF -> DATA = 0x02; 
+        wait(); 
+        GPIOF -> DATA = 0x04; 
+        wait(); 
+        GPIOF -> DATA = 0x08; 
+        wait(); 
+        
+    }
+
+}
+
+
+void wait(){
+    int counter = 0; 
+    while(counter++ < 1000000);
 }
 
 /* Enable i2c peripherial

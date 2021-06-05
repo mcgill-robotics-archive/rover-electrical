@@ -24,7 +24,6 @@ void dataGet(int howMany){
     else{
       digitalWrite(Led, LOW);
     }
-    Wire.write(c);
   }
   int x = Wire.read; 
   Serial.print(x);
@@ -34,5 +33,4 @@ void dataGet(int howMany){
   else{
     digitalWrite(Led, LOW); 
   }
-  Wire.write(x);
 }
