@@ -12,10 +12,11 @@ void setup() {
 void loop() {
   // put your main code here, to run repeatedly:
   delay(100);
+  Wire.write(1);
 }
 
 void dataGet(int howMany){
-  while(1 < Wire.available){
+  while(1 < Wire.available()){
     char c = Wire.read(); 
     Serial.print(c);
     if(c == 1){
@@ -25,7 +26,7 @@ void dataGet(int howMany){
       digitalWrite(Led, LOW);
     }
   }
-  int x = Wire.read; 
+  int x = Wire.read();
   Serial.print(x);
   if(x == 1){
     digitalWrite(Led, HIGH); 
