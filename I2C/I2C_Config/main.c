@@ -28,71 +28,66 @@ int main(void)
 
     write(4, I2C0_BASE, false, 2, 0, 0x01);
 
-    data = read(4, 0x05, I2C0_BASE, true);
+    data = read(4, 0, I2C0_BASE, true);
 
-    // if(data == 0x20){
-    //     volatile uint32_t ui32Loop;
+     if(data == 0){
+         volatile uint32_t ui32Loop;
 
-    //         //
-    //         // Enable the GPIO port that is used for the on-board LED.
-    //         //
-    //         SysCtlPeripheralEnable(SYSCTL_PERIPH_GPIOF);
+             //
+             // Enable the GPIO port that is used for the on-board LED.
+             //
+             SysCtlPeripheralEnable(SYSCTL_PERIPH_GPIOF);
 
-    //         //
-    //         // Check if the peripheral access is enabled.
-    //         //
-    //         while(!SysCtlPeripheralReady(SYSCTL_PERIPH_GPIOF)){
-    //         }
+             //
+             // Check if the peripheral access is enabled.
+             //
+             while(!SysCtlPeripheralReady(SYSCTL_PERIPH_GPIOF)){
+             }
 
-    //         //
-    //         // Enable the GPIO pin for the LED (PF3).  Set the direction as output, and
-    //         // enable the GPIO pin for digital function.
-    //         //
-    //         GPIOPinTypeGPIOOutput(GPIO_PORTF_BASE, GPIO_PIN_1);
-    //         GPIOPinTypeGPIOOutput(GPIO_PORTF_BASE, GPIO_PIN_2);
-    //         GPIOPinTypeGPIOOutput(GPIO_PORTF_BASE, GPIO_PIN_3);
-    //         //
-    //         // Loop forever.
-    //         //
-    //         while(1)
-    //         {
-    //             //
-    //             // Turn on the LED.
-    //             //
-    //             GPIOPinWrite(GPIO_PORTF_BASE, GPIO_PIN_1, GPIO_PIN_1);
-    //             GPIOPinWrite(GPIO_PORTF_BASE, GPIO_PIN_2, GPIO_PIN_2);
-    //             GPIOPinWrite(GPIO_PORTF_BASE, GPIO_PIN_3, GPIO_PIN_3);
+             //
+             // Enable the GPIO pin for the LED (PF3).  Set the direction as output, and
+             // enable the GPIO pin for digital function.
+             //
+             GPIOPinTypeGPIOOutput(GPIO_PORTF_BASE, GPIO_PIN_1);
+             GPIOPinTypeGPIOOutput(GPIO_PORTF_BASE, GPIO_PIN_2);
+             GPIOPinTypeGPIOOutput(GPIO_PORTF_BASE, GPIO_PIN_3);
+             //
+             // Loop forever.
+             //
+             while(1)
+             {
+                 //
+                 // Turn on the LED.
+                 //
+                 GPIOPinWrite(GPIO_PORTF_BASE, GPIO_PIN_1, GPIO_PIN_1);
+                 GPIOPinWrite(GPIO_PORTF_BASE, GPIO_PIN_2, GPIO_PIN_2);
+                 GPIOPinWrite(GPIO_PORTF_BASE, GPIO_PIN_3, GPIO_PIN_3);
 
-    //             //
-    //             // Delay for a bit.
-    //             //
-    //             for(ui32Loop = 0; ui32Loop < 200000; ui32Loop++){
-    //             }
+                 //
+                 // Delay for a bit.
+                 //
+                 for(ui32Loop = 0; ui32Loop < 200000; ui32Loop++){
+                 }
 
-    //             //
-    //             // Turn off the LED.
-    //             //
-    //             GPIOPinWrite(GPIO_PORTF_BASE, GPIO_PIN_1, 0x0);
-    //             GPIOPinWrite(GPIO_PORTF_BASE, GPIO_PIN_2, 0x0);
-    //             GPIOPinWrite(GPIO_PORTF_BASE, GPIO_PIN_3, 0x0);
+                 //
+                 // Turn off the LED.
+                 //
+                 GPIOPinWrite(GPIO_PORTF_BASE, GPIO_PIN_1, 0x0);
+                 GPIOPinWrite(GPIO_PORTF_BASE, GPIO_PIN_2, 0x0);
+                 GPIOPinWrite(GPIO_PORTF_BASE, GPIO_PIN_3, 0x0);
 
 
-    //             //
-    //             // Delay for a bit.
-    //             //
-    //             for(ui32Loop = 0; ui32Loop < 2000000; ui32Loop++){
-    //             }
-    //         }
+                 //
+                 // Delay for a bit.
+                 //
+                 for(ui32Loop = 0; ui32Loop < 2000000; ui32Loop++){
+                 }
+             }
 
-    // }
+     }
 
 }
 
-
-// void wait(){
-//     int counter = 0;
-//     while(counter++ < 1000000);
-// }
 
 /* Enable i2c peripherial
 * I2CMasterInitExpClk
