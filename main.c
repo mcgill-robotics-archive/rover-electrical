@@ -253,27 +253,49 @@ int main(void)
 
     // Initialize everything
     pwm_init_bank();
-
-    int pinnum;
-    for(pinnum = 29; pinnum <= 31; pinnum++){
-        // Set the pin as PWM output
-        pwm_set_output(pinnum);
-
-        // Sweep the duty cycle range from 0% to 100% and back
-        // a couple of times
-        int i,j;
-        for(j=0; j < 100; j++){
-
-            for(i=0; i <= 3300; i++){
-                pwm_write(pinnum, i);
-                }
-            for(i=3300; i >= 0; i--){
-                pwm_write(pinnum, i);
-                }
-        }
-        // Wait for 5 seconds and do the same with other two LED's
-        delaySeconds(5);
+    
+    pwm_set_input(6);
+    
+    double voltage; 
+    
+    SysCtlPeripheralEnable(SYSCTL_PERIPH_GPIOF);
+    
+    while(!SysCtlPeripheralReady(SYSCTL_PERIPH_GPIOF)){
     }
+    
+    GPIOPinTypeGPIOOutput(GPIO_PORTF_BASE, GPIO_PIN_3);
+    
+   while(1){
+      voltage = pwm_read(6);
+      if (voltage > 1. 65){
+          GPIOPinWrite(GPIO_PORTF_BASE, GPIO_PIN_3, GPIO_PIN_3);
+      }
+      else
+          GPIOPinWrite(GPIO_PORTF_BASE, GPIO_PIN_3, 0x0);
+   }
+     
+    
+    
+//     int pinnum;
+//     for(pinnum = 29; pinnum <= 31; pinnum++){
+//         // Set the pin as PWM output
+//         pwm_set_output(pinnum);
+
+//         // Sweep the duty cycle range from 0% to 100% and back
+//         // a couple of times
+//         int i,j;
+//         for(j=0; j < 100; j++){
+
+//             for(i=0; i <= 3300; i++){
+//                 pwm_write(pinnum, i);
+//                 }
+//             for(i=3300; i >= 0; i--){
+//                 pwm_write(pinnum, i);
+//                 }
+//         }
+        // Wait for 5 seconds and do the same with other two LED's
+        //delaySeconds(5);
+//     }
 }
 
 void delaySeconds(int seconds){
