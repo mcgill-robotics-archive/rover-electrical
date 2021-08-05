@@ -69,7 +69,7 @@
 #include <Wire.h>
 #include <SPI.h>
 #include <IfxMotorControlShield.h>
-#include "SerialInterface.h"
+#include "Serial/include/SerialInterface.h"
 
 const int PROGMEM POWER_ON = 51;
 const int PROGMEM LIMIT_SWITCH_1 = 34;
